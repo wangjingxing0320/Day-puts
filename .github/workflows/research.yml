@@ -1,5 +1,8 @@
 name: Daily research pipeline
 on:
+  push:
+    branches: [main]
+    paths: ['scripts/research_daily.py', '.github/workflows/research.yml']
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
@@ -29,7 +32,7 @@ jobs:
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL || 'deepseek-flash' }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+          DRY_RUN: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
         run: |
           if [ "$DRY_RUN" = "true" ]; then
             python scripts/research_daily.py --dry-run
