@@ -1,0 +1,57 @@
+name: Daily research pipeline
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Collect only; no AI costs or publication"
+        type: boolean
+        default: true
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: daily-research
+  cancel-in-progress: false
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate syntax
+        run: python -m py_compile scripts/research_daily.py
+      - name: Collect, analyze and review
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_MODEL: ${{ vars.DEEPSEEK_MODEL || 'deepseek-flash' }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            python scripts/research_daily.py --dry-run
+          else
+            python scripts/research_daily.py
+          fi
+      - name: Commit approved content and deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! git diff --quiet -- data/content.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/content.json
+            git commit -m "data: publish reviewed daily research"
+            git push
+            gh workflow run pages.yml --ref main
+          fi
+      - name: Preserve sanitized run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-run-${{ github.run_id }}
+          path: run-logs/
+          retention-days: 30
