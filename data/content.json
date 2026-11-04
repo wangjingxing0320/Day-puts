@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "updated_at": "2026-11-04T02:57:33.557420+00:00",
+  "updated_at": "2026-11-04T03:41:20.956203+00:00",
   "papers": [
     {
       "paper_id": "arxiv-2611.03360",
@@ -296,6 +296,365 @@
       "display": {
         "teaser": "Kev-Bio 将临床测量问题转化为语言模型的决策表示，并以此生成每个卡尺端点的查询，与共享的多编码器密集超声特征图逐像素匹配产生空间概率图，从而在统一框架内完成多视图关键点定位与临床测量。"
       }
+    },
+    {
+      "paper_id": "arxiv-2611.04710",
+      "metadata": {
+        "title_en": "DenseTwins: Dense Modality Decoupling for Multimodal Self-Supervision",
+        "title_zh": "DenseTwins：面向多模态自监督的稠密模态解耦",
+        "authors": [
+          "Carlo Sgaravatti",
+          "Daniele Kopyshevskiy",
+          "Davide Secco",
+          "Giacomo Boracchi"
+        ],
+        "first_public_date": "2026-11-03",
+        "paper_url": "https://arxiv.org/abs/2611.04710",
+        "doi": "",
+        "publication_status": "preprint"
+      },
+      "classification": {
+        "primary_module": "feature_representation",
+        "modalities": [
+          "RGB-Depth",
+          "RGB-Event",
+          "RGB-Thermal",
+          "RGB-DEM",
+          "RGB-LiDAR",
+          "SAR-Optical"
+        ],
+        "keywords": [
+          "多模态自监督学习",
+          "模态解耦",
+          "稠密表示学习",
+          "冗余缩减",
+          "Barlow Twins",
+          "稠密对应",
+          "语义分割",
+          "目标检测"
+        ]
+      },
+      "analysis": {
+        "one_line_innovation": "首次在稠密隐空间中将多模态特征显式解耦为共享子空间与模态特有子空间，结合稠密的跨模态对应与冗余缩减目标进行自监督预训练。",
+        "research_problem": "现有多模态自监督方法要么通过强制特征空间对齐而忽略模态特有信息，要么只学习全局表示而丢失空间结构，难以适用于语义分割、目标检测等稠密预测任务。",
+        "traditional_approach": "将不同模态投影到共享嵌入空间并对齐表示（如CLIP的跨模态对比学习）、用冗余缩减目标避免坍缩（如Barlow Twins、VICReg），以及在全局特征向量上做模态解耦（如DeCUR）；稠密对应学习（如DenseCL）则主要限于单模态场景。",
+        "traditional_limitations": "对齐类方法只关注模态共享特征并可能抑制有用的模态特有信息，且不显式建模空间结构；DeCUR虽显式解耦但仅在全局表示上操作，丢弃空间结构，限制其在稠密预测任务上的适用性；单模态稠密方法难以直接扩展到任意多模态输入对。",
+        "method_overview": "DenseTwins对每个模态用独立编码器提取稠密特征图，经全局与稠密投影头映射到K_p维嵌入空间并划分为共享子空间（前K_s维）与模态特有子空间（后K_u维）。在特征空间中用余弦相似度建立模态内和跨模态的稠密token对应，共享分量做不变性与冗余缩减，模态特有条件做解耦。总损失由两个模态内损失与一个跨模态损失组成，均为全局与稠密项的凸组合。",
+        "architecture_steps": [
+          {
+            "module": "数据增强与编码",
+            "input": "同一场景的两模态观测 (X1, X2)",
+            "operation": "对每个模态独立生成两个增强视图，分别送入模态特定骨干 ℱ1、ℱ2 提取稠密特征图 F'、F''",
+            "output": "两模态各自的稠密特征图"
+          },
+          {
+            "module": "投影头",
+            "input": "稠密特征图 F",
+            "operation": "全局投影头（全局平均池化后投影）与稠密投影头分别映射到 K_p 维空间，并划分为共享子空间与模态特有子空间",
+            "output": "全局嵌入 y 与稠密嵌入 Z=[s;u]"
+          },
+          {
+            "module": "稠密对应构建",
+            "input": "两视图/两模态的特征嵌入",
+            "operation": "以余弦相似度计算相似度矩阵 Δ，对每个token取最相似token作为对应（argmax），模态内用骨干特征建立对应，跨模态仅在共享子空间上建立对应",
+            "output": "匹配的token对集合"
+          },
+          {
+            "module": "模态内损失",
+            "input": "同一模态两视图的全局与稠密嵌入",
+            "operation": "计算互相关矩阵 Ī(m)、I(m)，施加冗余缩减损失，按 (1-α) 与 α 加权组合全局与稠密项",
+            "output": "模态内损失 L_intra(1)、L_intra(2)"
+          },
+          {
+            "module": "跨模态损失",
+            "input": "两模态相互对应的全局与稠密嵌入",
+            "operation": "将互相关矩阵分块为 C^ss、C^uu；对共享块施加不变性与冗余缩减，对特有块施加完全去相关（对角与非对角均趋零）",
+            "output": "跨模态损失 L_cross = (1-α)L_cross^g + α L_cross^d"
+          },
+          {
+            "module": "总优化",
+            "input": "各分量损失",
+            "operation": "L_total = L_intra(1) + L_intra(2) + L_cross，反向传播更新编码器与投影头",
+            "output": "预训练编码器（下游仅保留 ℱ1、ℱ2，丢弃投影头）"
+          }
+        ],
+        "technical_changes": [
+          {
+            "before": "DeCUR 仅在全局特征向量上做共享/特有解耦",
+            "change": "将嵌入空间分解扩展到稠密token级表示，共享子空间维度为 K_s、特有子空间为 K_u",
+            "rationale": "稠密预测任务（分割、检测）需要保留空间结构",
+            "benefit": "在SUN-RGBD冻结探测与KAIST/DSEC检测上大幅优于DeCUR"
+          },
+          {
+            "before": "多模态对齐通常直接对全部特征对齐",
+            "change": "仅用共享子空间建立跨模态对应，并对特有子空间施加完全去相关",
+            "rationale": "共享子空间才是跨模态对齐的期望场所，特有分量应保持独立",
+            "benefit": "消融显示稠密目标带来最大增益（仅稠密目标即比仅全局高+0.7 mIoU）"
+          },
+          {
+            "before": "按固定空间位置匹配两视图token",
+            "change": "在特征空间用余弦相似度最近邻搜索建立模态内与跨模态对应",
+            "rationale": "增强会改变空间布局，同位token未必语义对应",
+            "benefit": "对合成错位具有鲁棒性（32px偏移下Recall@1 0.61 vs 对齐0.62）"
+          },
+          {
+            "before": "单一全局或多尺度损失",
+            "change": "总损失为模态内与跨模态、全局与稠密四级目标的组合，并对跨模态稠密项权重α做线性warmup",
+            "rationale": "早期对应噪声大，全局与稠密监督互补",
+            "benefit": "联合投影头带来+0.8 mIoU与+5.4 LP mIoU的增益"
+          }
+        ],
+        "experiments": [
+          {
+            "dataset": "SUN-RGBD (CMX微调, 13类)",
+            "metric": "mIoU (10%标签)",
+            "baseline": "SimCLR / DeCUR",
+            "baseline_value": "37.6 / 36.9",
+            "proposed_value": "38.2",
+            "conclusion": "低标签微调下取得最佳"
+          },
+          {
+            "dataset": "SUN-RGBD (CMX微调, 13类)",
+            "metric": "mIoU (100%标签)",
+            "baseline": "VICReg",
+            "baseline_value": "51.0",
+            "proposed_value": "51.5",
+            "conclusion": "全监督微调下取得最佳"
+          },
+          {
+            "dataset": "SUN-RGBD (冻结探测, NYU-13)",
+            "metric": "kNN / LP / FCN mIoU",
+            "baseline": "DeCUR",
+            "baseline_value": "22.0 / 23.7 / 35.8",
+            "proposed_value": "29.1 / 33.7 / 40.6",
+            "conclusion": "冻结探测下大幅领先所有基线"
+          },
+          {
+            "dataset": "EventScape (CMX微调)",
+            "metric": "mIoU",
+            "baseline": "CLIP",
+            "baseline_value": "63.5",
+            "proposed_value": "63.3",
+            "conclusion": "优于所有冗余缩减基线，仅略低于CLIP"
+          },
+          {
+            "dataset": "KAIST (FCOS冻结, ViT-S/16)",
+            "metric": "AP50 All / Reasonable",
+            "baseline": "DINO",
+            "baseline_value": "25.8 / 30.6",
+            "proposed_value": "26.8 / 29.8",
+            "conclusion": "ViT-S下All AP50最佳，Swin-T进一步提升至33.3/35.3"
+          },
+          {
+            "dataset": "DSEC (FCOS冻结, ViT-S/16)",
+            "metric": "AP50 All / Car / Pedestrian",
+            "baseline": "DeCUR",
+            "baseline_value": "31.6 / 4.7",
+            "proposed_value": "46.0 / 9.3",
+            "conclusion": "全局表示方法在检测上显著落后，稠密预训练获益更大"
+          },
+          {
+            "dataset": "GeoNRW (FCN微调)",
+            "metric": "mIoU (1%标签)",
+            "baseline": "DeCUR",
+            "baseline_value": "41.5",
+            "proposed_value": "41.7",
+            "conclusion": "低标签下最佳，全监督56.0与VICReg的56.3接近"
+          },
+          {
+            "dataset": "GeoNRW (冻结探测)",
+            "metric": "kNN / LP / FCN mIoU",
+            "baseline": "DeCUR",
+            "baseline_value": "30.6 / 34.7 / 45.5",
+            "proposed_value": "36.6 / 40.5 / 46.1",
+            "conclusion": "三种探测协议下均最佳"
+          },
+          {
+            "dataset": "BigEarthNet (SAR-Optical)",
+            "metric": "mAP",
+            "baseline": "DeCUR",
+            "baseline_value": "0.831",
+            "proposed_value": "0.834",
+            "conclusion": "图像级分类亦取得最佳"
+          },
+          {
+            "dataset": "SemanticKITTI (PMF微调)",
+            "metric": "mIoU",
+            "baseline": "DeCUR",
+            "baseline_value": "65.0",
+            "proposed_value": "65.2",
+            "conclusion": "微调下优于DeCUR"
+          },
+          {
+            "dataset": "SemanticKITTI (MinkUNet+ViT冻结)",
+            "metric": "FOV mIoU / Full mIoU",
+            "baseline": "DeCUR",
+            "baseline_value": "44.8 / 44.4",
+            "proposed_value": "47.1 / 44.1",
+            "conclusion": "相机视野内领先，全域略低于DeCUR（大部分点无RGB）"
+          }
+        ],
+        "limitations": [
+          {
+            "description": "共享/特有的划分比例 K_s/K_p 需人工按模态对调参，缺少自动适配机制",
+            "basis": "正文指出RGB-Depth最优约75%、GeoNRW约62%，并称自动适配留作未来工作"
+          },
+          {
+            "description": "仅在部分数据的场景中略逊于对比类方法CLIP（EventScape 63.3 vs 63.5）",
+            "basis": "5.2节原文：only CLIP (63.5) scores slightly higher"
+          },
+          {
+            "description": "在多数点缺失RGB的SemanticKITTI全域mIoU上略低于DeCUR",
+            "basis": "5.5节原文：DeCUR is marginally better in mIoU"
+          },
+          {
+            "description": "需要两种模态在预训练时同步采集且成对出现，单模态单独使用时性能不如专用单模态方法",
+            "basis": "问题形式化要求同步采集；D.2节显示RGB LP为17.2低于I-JEPA的19.6"
+          },
+          {
+            "description": "投影头带来约+25%训练时间与+26%峰值显存开销",
+            "basis": "附录D.1原文：increase training time by +25% and peak GPU memory by +26%"
+          }
+        ],
+        "ship_transfer": {
+          "relevance": "船舶多传感器感知（可见光+红外/热成像、可见光+LiDAR/雷达、可见光+AIS/电子海图等空间化模态）常面临标注稀缺与稠密感知任务（障碍物分割、目标检测）需求，该方法可无标签利用大量成对船舶航行数据学习保留空间结构的双模态表示。",
+          "adaptations": [
+            "将两个模态分支替换为船载相机与热成像/LiDAR/雷达等空间化模态，丢弃非空间模态（纯文本AIS报文不适合直接使用）",
+            "跨模态对应改为特征空间最近邻而非固定像素位置，以适应船载多传感器未严格标定的空间错位",
+            "下游可接海上目标分割/检测头，若需单传感器部署可只保留单分支编码器",
+            "按模态对调整共享子空间比例，海上场景需重新调参"
+          ],
+          "research_hypotheses": [
+            "在船载可见光-热成像配对数据上，稠密模态解耦表示相比全局对齐方法能提升小目标和远距离障碍物检测AP",
+            "夜间/恶劣天气下热成像或雷达分支的特有子空间保留了互补信息，提升跨模态融合鲁棒性",
+            "对于船载传感器存在视差与时间不同步的错位场景，基于特征最近邻的对应机制仍能保持检索召回"
+          ]
+        },
+        "open_questions": [
+          "如何自动学习每个模态对的最优共享/特有划分比例",
+          "用对比学习替代冗余缩减来对齐共享子空间是否能进一步提升",
+          "如何扩展到非空间化模态（如文本）或三模态以上场景"
+        ]
+      },
+      "evidence": [
+        {
+          "quote": "existing methods either neglect modality-specific information by enforcing feature-space alignment between modalities or learn only global representations without preserving spatial structure",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "we propose DenseTwins ( Figure 1 ), the first SSL framework explicitly performing decoupling in a dense latent space, preserving the spatial structure while retaining both shared and modality-specific information",
+          "locator": "Section 1",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "DeCUR [ 33 ] operates on global feature vectors and does not preserve spatial structure, limiting its applicability to dense prediction tasks",
+          "locator": "Section 2.3",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "we partition the embedding space into a shared subspace (first K s K_{s} components) capturing cross-modal semantics, and a modality-specific subspace (last K u K_{u} components) preserving unique cues",
+          "locator": "Section 4",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "we use only the shared subspace to define correspondences since this is the subspace where cross-modal alignment is expected",
+          "locator": "Section 4.2",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "DenseTwins 38.2 51.5 63.3",
+          "locator": "Table 2",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "DenseTwins 29.1 33.7 40.6",
+          "locator": "Table 3",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "only CLIP (63.5) scores slightly higher",
+          "locator": "Section 5.2",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "DenseTwins 65.2 47.1 44.1",
+          "locator": "Table 6",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "DeCUR is marginally better in mIoU",
+          "locator": "Section 5.5",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "training with dense objectives only already outperforms the global-only configuration by + 0.7 +0.7 mIoU (51.3 vs. 50.6)",
+          "locator": "Section 5.6",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "K s ≈ 75 % , K p K_{s}\\approx 75\\%,K_{p} for RGB-Depth and K s ≈ 62 % , K p K_{s}\\approx 62\\%,K_{p} for GeoNRW",
+          "locator": "Section 5.6",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Automatically adapting this split to each modality pair is left for future work",
+          "locator": "Section 5.6",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Recall@1 and Recall@5 remain close to the aligned setting under both shifts",
+          "locator": "Appendix D.3",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "the projection heads increase training time by + 25 % +25\\% and peak GPU memory by + 26 % +26\\%",
+          "locator": "Appendix D.1",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "it is the best-performing method on Depth LP, and consistently outperforms DINO, iBOT and LeJEPA on RGB",
+          "locator": "Appendix D.2",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "we require synchronized acquisition time",
+          "locator": "Section 3",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Non-spatial modalities, such as text, are therefore outside the scope of our formulation",
+          "locator": "Section 3",
+          "url": "https://arxiv.org/html/2611.04710",
+          "source_type": "arxiv_full_text"
+        }
+      ],
+      "review": {
+        "review_status": "approved",
+        "reviewed_at": "2026-11-04",
+        "method": "separate AI context; exact evidence validation",
+        "model": "deepseek-flash"
+      },
+      "display": {
+        "teaser": "首次在稠密隐空间中将多模态特征显式解耦为共享子空间与模态特有子空间，结合稠密的跨模态对应与冗余缩减目标进行自监督预训练。"
+      }
     }
   ],
   "issues": [
@@ -303,7 +662,8 @@
       "issue_date": "2026-11-04",
       "status": "published",
       "paper_ids": [
-        "arxiv-2611.03360"
+        "arxiv-2611.03360",
+        "arxiv-2611.04710"
       ],
       "daily_summary": {
         "title": "多模态科研日报",
