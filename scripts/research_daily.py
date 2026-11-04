@@ -50,10 +50,14 @@ def ai(instruction, data):
         raise ValueError("incomplete AI output: finish_reason=" + str(choice["finish_reason"]))
     return json.loads(choice["message"]["content"])
 
-def collect():
-    start = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=7)).strftime("%Y%m%d0000")
+CLASSICS = {"2103.00020": "CLIP", "2201.12086": "BLIP", "2301.12597": "BLIP-2", "2204.14198": "Flamingo", "2304.08485": "LLaVA"}
+
+def collect(classics=False):
+    start = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=30)).strftime("%Y%m%d0000")
     query = '(all:multimodal OR all:"vision language" OR all:"cross modal") AND submittedDate:[' + start + ' TO 300001010000]'
     url = "https://export.arxiv.org/api/query?" + urllib.parse.urlencode({"search_query": query, "max_results": 40, "sortBy": "submittedDate", "sortOrder": "descending"})
+    if classics:
+        url = "https://export.arxiv.org/api/query?" + urllib.parse.urlencode({"id_list": ",".join(CLASSICS), "max_results": 10})
     root = ET.fromstring(request(url)); ns = {"a": "http://www.w3.org/2005/Atom"}
     if root.find("a:entry/a:id", ns) is None and root.find("a:title", ns) is None: raise ValueError("invalid feed")
     papers = []
@@ -95,42 +99,46 @@ def run(dry):
         raise ValueError("DEEPSEEK_API_KEY is not available to this run; add the repository Actions secret, then start a new run")
     path = Path("data/content.json"); content = json.loads(path.read_text(encoding="utf-8"))
     day = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=8)).date().isoformat()
-    if any(i["issue_date"] == day and i.get("paper_ids") for i in content["issues"]):
+    today_ids = list(dict.fromkeys(pid for i in content["issues"] if i["issue_date"] == day for pid in i.get("paper_ids", [])))
+    if len(today_ids) >= 5:
         return {"status": "already_published", "approved": 0}
     old = content["papers"]
     ids = {canonical(p.get("metadata", {}).get("paper_url", p["paper_id"])) for p in old}
     titles = {norm(p.get("metadata", {}).get("title_en", "")) for p in old}
     dois = {p.get("metadata", {}).get("doi", "").lower() for p in old} - {""}
     candidates = []; seen = set()
-    for p in collect():
+    discovered = collect()
+    time.sleep(3)
+    discovered = collect(classics=True) + discovered
+    for p in discovered:
         if p["id"] in ids or norm(p["title"]) in titles or (p["doi"] and p["doi"].lower() in dois) or norm(p["title"]) in seen: continue
         seen.add(norm(p["title"])); candidates.append(p)
     if dry: return {"status": "dry_run", "candidates": len(candidates), "approved": 0, "note": "No AI calls or writes"}
     if not os.getenv("DEEPSEEK_API_KEY"): raise ValueError("DEEPSEEK_API_KEY is required")
-    selected = ai('Rank up to twelve highly relevant novel multimodal technical papers in descending relevance, including reserves for inaccessible full text. JSON {"ids": [arxiv_id]}. Use only supplied IDs.', candidates).get("ids", [])
+    selected = ai('Rank up to twelve educationally useful multimodal papers, including foundational classics and recent incremental methods. Prioritize at least three supplied classics (CLIP, BLIP, BLIP-2, Flamingo, LLaVA) when present. Do not require novelty, top-tier venue, or ship-specific experiments. Require a concrete multimodal method. Include reserves for inaccessible full text. JSON {"ids": [arxiv_id]}. Use only supplied IDs.', candidates).get("ids", [])
     approved = []; skipped = []
     for p in sorted([p for p in candidates if p["id"] in selected], key=lambda p: selected.index(p["id"]))[:12]:
-        if len(approved) >= 5: break
+        if len(approved) + len(today_ids) >= 5: break
         try:
             time.sleep(3)
             url, text = full_text(p["id"])
             draft = ai('Analyze in Chinese from the entire supplied paper. JSON {title_zh, classification:{primary_module,modalities,keywords}, analysis:{one_line_innovation,research_problem,traditional_approach,traditional_limitations,method_overview,architecture_steps:[{module,input,operation,output}],technical_changes:[{before,change,rationale,benefit}],experiments:[{dataset,metric,baseline,baseline_value,proposed_value,conclusion}],limitations:[{description,basis}],ship_transfer:{relevance,adaptations,research_hypotheses},open_questions}, evidence:[{quote,locator}]}. primary_module must be model_architecture, feature_representation, feature_extraction, cross_modal_alignment, feature_fusion, data, training_optimization, reasoning_decision or system_reliability. Evidence quotes must be exact substrings from source and support every substantive claim. Clearly label speculative ship transfer.', {"metadata": p, "full_text": text})
             evidence = draft["evidence"]
             if not evidence or any(not e.get("quote") or e["quote"] not in text for e in evidence): raise ValueError("invalid evidence")
-            review = ai('Independently fact-check the draft against original full text. Check identity, all numbers, baselines, architecture, citations, unsupported claims and speculative transfer. Fail closed on any uncertainty. JSON {approved:boolean, reasons:[string]}. Approve only a detailed, fully supported analysis.', {"metadata": p, "full_text": text, "draft": draft})
+            review = ai('Independently fact-check the draft against original full text. Check identity, all numbers, baselines, architecture, citations, unsupported claims and speculative transfer. Reject factual errors and unsupported claims. Do not reject solely for limited novelty, older publication, limited scope, or explicitly labeled transfer hypotheses. Unknown details must be stated as unknown. JSON {approved:boolean, reasons:[string]}. Approve only a detailed, fully supported analysis.', {"metadata": p, "full_text": text, "draft": draft})
             if review.get("approved") is not True: raise ValueError("review rejected")
             a = draft["analysis"]
             if not all(a.get(k) for k in ("research_problem","method_overview","architecture_steps","technical_changes","experiments","limitations")): raise ValueError("incomplete analysis")
-            approved.append({"paper_id": "arxiv-" + p["id"], "metadata": {"title_en": p["title"], "title_zh": draft["title_zh"], "authors": p["authors"], "first_public_date": p["date"], "paper_url": "https://arxiv.org/abs/" + p["id"], "doi": p["doi"], "publication_status": "preprint"},
+            approved.append({"paper_id": "arxiv-" + p["id"], "metadata": {"title_en": p["title"], "title_zh": ("【经典回顾】" if p["id"] in CLASSICS else "") + draft["title_zh"], "authors": p["authors"], "first_public_date": p["date"], "paper_url": "https://arxiv.org/abs/" + p["id"], "doi": p["doi"], "publication_status": "preprint"},
                 "classification": draft["classification"], "analysis": a,
                 "evidence": [dict(e, url=url, source_type="arxiv_full_text") for e in evidence],
                 "review": {"review_status": "approved", "reviewed_at": day, "method": "separate AI context; exact evidence validation", "model": os.getenv("DEEPSEEK_MODEL", "deepseek-flash")},
-                "display": {"teaser": a["one_line_innovation"]}})
+                "display": {"teaser": ("【经典回顾 · " + CLASSICS[p["id"]] + "】" if p["id"] in CLASSICS else "") + a["one_line_innovation"]}})
         except Exception as exc:
             skipped.append({"id": p["id"], "reason": error_detail(exc)})
     content["papers"].extend(approved)
     content["issues"] = [i for i in content["issues"] if i["issue_date"] != day]
-    content["issues"].insert(0, {"issue_date": day, "status": "published" if approved else "empty", "paper_ids": [p["paper_id"] for p in approved], "daily_summary": {"title": "多模态科研日报", "trends": []}})
+    content["issues"].insert(0, {"issue_date": day, "status": "published" if approved or today_ids else "empty", "paper_ids": today_ids + [p["paper_id"] for p in approved], "daily_summary": {"title": "多模态科研日报", "trends": []}})
     content["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
     temp = path.with_suffix(".tmp"); temp.write_text(json.dumps(content, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"); temp.replace(path)
     return {"status": "published" if approved else "empty", "candidates": len(candidates), "approved": len(approved), "skipped": skipped}
