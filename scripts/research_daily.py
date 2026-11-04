@@ -64,6 +64,8 @@ def collect():
     return papers
 
 def run(dry):
+    if not dry and not os.getenv("DEEPSEEK_API_KEY", "").strip():
+        raise ValueError("DEEPSEEK_API_KEY is not available to this run; add the repository Actions secret, then start a new run")
     path = Path("data/content.json"); content = json.loads(path.read_text(encoding="utf-8"))
     day = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=8)).date().isoformat()
     if any(i["issue_date"] == day for i in content["issues"]):
@@ -114,6 +116,9 @@ if __name__ == "__main__":
         result = run(args.dry_run)
     except Exception as exc:
         result = {"status": "failed", "error_type": type(exc).__name__}
+        if isinstance(exc, ValueError) and str(exc).startswith("DEEPSEEK_API_KEY"):
+            result["error_code"] = "missing_api_key"
+            print("::error::DEEPSEEK_API_KEY is unavailable. Add the repository Actions secret, then start a new workflow run.")
         Path("run-logs/latest.json").write_text(json.dumps(result), encoding="utf-8")
         raise SystemExit("Pipeline failed; see sanitized run log")
     Path("run-logs/latest.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
