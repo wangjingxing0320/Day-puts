@@ -1,12 +1,310 @@
 {
   "schema_version": "1.0.0",
-  "updated_at": "2026-11-04T02:33:09.048885+00:00",
-  "papers": [],
+  "updated_at": "2026-11-04T02:57:33.557420+00:00",
+  "papers": [
+    {
+      "paper_id": "arxiv-2611.03360",
+      "metadata": {
+        "title_en": "Every Pixel Is an Option: A System One Model for Medical Ultrasound Biometry",
+        "title_zh": "每个像素都是一个选项：用于医学超声生物测量的系统一模型",
+        "authors": [
+          "Moein Heidari",
+          "Junbo Rao",
+          "Yudan Chen",
+          "Yasamin Medghalchi",
+          "River Jiang",
+          "Wenjin Chen",
+          "David J. Foran",
+          "Jasmine Grewal",
+          "Ilker Hacihaliloglu"
+        ],
+        "first_public_date": "2026-11-02",
+        "paper_url": "https://arxiv.org/abs/2611.03360",
+        "doi": "",
+        "publication_status": "preprint"
+      },
+      "classification": {
+        "primary_module": "model_architecture",
+        "modalities": [
+          "ultrasound_image",
+          "text_instruction",
+          "image_text_multimodal"
+        ],
+        "keywords": [
+          "超声生物测量",
+          "视觉语言模型",
+          "关键点检测",
+          "系统一决策模型",
+          "密集特征融合",
+          "空间概率图"
+        ]
+      },
+      "analysis": {
+        "one_line_innovation": "Kev-Bio 将临床测量问题转化为语言模型的决策表示，并以此生成每个卡尺端点的查询，与共享的多编码器密集超声特征图逐像素匹配产生空间概率图，从而在统一框架内完成多视图关键点定位与临床测量。",
+        "research_problem": "超声生物测量依赖手动放置卡尺，存在操作者间差异；现有方法为不同测量任务使用专门预测头或任务特定参数，难以适配新解剖结构；直接坐标回归不显式建模空间似然分布，难以表达定位模糊性。",
+        "traditional_approach": "传统方法使用共享图像编码器配任务专属解码器或关键点专用参数（如 CAMS、IMPACT-L），或以文本-图像表示直接回归坐标/热图（如 LISA 类点定位方法），每个测量任务绑定固定输出头。",
+        "traditional_limitations": "每个测量任务与固定输出头或任务特定参数集绑定，适配新解剖结构或新测量任务困难；直接坐标预测不显式建模空间似然分布，限制了对定位模糊性的表示；通用关键点检测器（nnLandmark、MedSapiens）在超声多视图多任务场景下误差明显更高。",
+        "method_overview": "Kev-Bio 以 Qwen3.5 语言骨干（初始化自 Kev 适配器）处理图像视觉 token（Qwen 视觉编码器 + USFM 投影）与视图指令及带 <q>/<decide> 标记的临床测量问题，取 <decide> 位置隐状态作为测量决策表示；经 MLP 并加可学习端点嵌入生成 L2 归一化的端点查询，与由 Qwen、USFM、DINOv2 及浅层卷积特征经 Pixel Neck 融合并 L2 归一化的共享密集特征图做点积与空间 softmax，得到每个端点的空间概率图，经可微 soft-argmax 得到坐标，再由测量几何函数计算临床测量值；端到端联合监督关键点、热图、几何测量与辅助回归。",
+        "architecture_steps": [
+          {
+            "module": "指令引导的多模态编码",
+            "input": "超声图像 I、视图指令 t_v、各测量问题 t_m（带 <q>/<decide> 标记）",
+            "operation": "Qwen3.5 视觉编码器与 USFM 提取视觉 token，USFM token 经投影网络 P_U 映射到语言嵌入空间；拼接为序列 X 单次前向；初始化自 Kev 适配器的 Qwen3.5 语言骨干处理序列，提取每个 <decide> 位置隐状态 h_m 作为测量决策表示",
+            "output": "每个测量的决策表示 h_m"
+          },
+          {
+            "module": "密集超声特征融合（Pixel Neck）",
+            "input": "Qwen、USFM、DINOv2 的密集特征及输入图像浅层卷积特征 C(I)",
+            "operation": "三路特征经双线性插值对齐到共同空间分辨率、归一化并拼接，经 Pixel Neck 投影并逐步上采样，融合浅层卷积特征保留细节，最后沿通道维 L2 归一化",
+            "output": "共享密集特征图 F（维度 d_p×H_p×W_p）"
+          },
+          {
+            "module": "语言条件像素指针",
+            "input": "决策表示 h_m、可学习端点嵌入 e_{m,k}、共享特征图 F",
+            "operation": "h_m 经 MLP 与 reshape 后加端点嵌入并 L2 归一化得到端点查询 q_{m,k}；查询与 F 各位置点积除以可学习温度 τ，空间 softmax 得概率图 P_{m,k}；可微 soft-argmax 加权求坐标",
+            "output": "每个端点的空间概率图及关键点坐标 p̂_{m,k}"
+          },
+          {
+            "module": "几何测量与监督",
+            "input": "预测关键点坐标、真值关键点与真值测量值",
+            "operation": "测量专属几何函数 g_m 计算距离/角度/周长近似；损失含指针 L1 损失（按图像对角线归一化）、热图交叉熵损失（真值高斯分布）、按训练集中位数归一化的几何损失及辅助回归头的 Huber 损失",
+            "output": "临床测量值 ŷ_m 与总训练目标 L"
+          }
+        ],
+        "technical_changes": [
+          {
+            "before": "使用任务特定解码器或关键点专属参数的多任务共享编码器架构",
+            "change": "由语言模型决策表示生成端点查询，与单一共享密集特征图匹配完成所有测量任务",
+            "rationale": "避免每个测量任务绑定固定输出头，使测量定义由文本问题灵活指定",
+            "benefit": "在九视图基准上取得最低平均 MRE 与 MAE，参数仅 35.0M"
+          },
+          {
+            "before": "从决策状态直接回归坐标",
+            "change": "引入像素指针：查询与密集特征点积加空间 softmax 产生概率图，soft-argmax 求坐标",
+            "rationale": "显式建模空间似然分布，表达定位模糊性",
+            "benefit": "MRE 从 35.50 降至 22.50，MAE 从 23.64 降至 15.38（消融）"
+          },
+          {
+            "before": "单一或两类视觉编码器特征",
+            "change": "融合 Qwen3.5（语言对齐）、USFM（超声专用）、DINOv2（多层级空间）三路特征及浅层卷积特征",
+            "rationale": "三类表示互补，兼顾解剖上下文与精细空间细节",
+            "benefit": "去除 DINOv2 后 MRE 由 22.50 升至 24.85、MAE 由 15.38 升至 16.94"
+          },
+          {
+            "before": "仅监督关键点坐标（或仅测量值）",
+            "change": "联合监督坐标、高斯热图、几何测量值及辅助回归",
+            "rationale": "点监督转为连续概率场并直接约束临床测量",
+            "benefit": "概率图熵可作为不确定性分数，用于错误检测"
+          }
+        ],
+        "experiments": [
+          {
+            "dataset": "FU/GU Biometry 2026（9 视图，心脏/产前/产时，6,743 张标注图像，60 个关键点定义，29 项测量；五折交叉验证，每折约 1,350 张）",
+            "metric": "平均径向误差 MRE（像素）与临床测量 MAE（像素，AoP 为度），九视图宏平均",
+            "baseline": "nnLandmark, MedSapiens, CAMS, IMPACT-L, FMUB, US-Foundation",
+            "baseline_value": "MRE 最优基线 CAMS 23.88；MAE 最优基线 FMUB 17.47",
+            "proposed_value": "MRE 22.50±2.10；MAE 15.38±1.24",
+            "conclusion": "Kev-Bio 在 MRE 与 MAE 平均值上均优于所报告基线，九视图中八视图关键点定位最佳、六视图测量误差最低；胎儿头围 MRE 由 17.03 降至 13.76；且未使用额外无标注数据"
+          },
+          {
+            "dataset": "FU/GU Biometry 2026（消融，五折）",
+            "metric": "MRE 与 MAE",
+            "baseline": "w/o DINOv2；w/o LLM；w/o pixel pointer；完整模型",
+            "baseline_value": "w/o DINOv2：24.85 MRE / 16.94 MAE；w/o LLM：23.66 / 16.77；w/o pixel pointer：35.50 / 23.64",
+            "proposed_value": "完整 Kev-Bio：22.50 / 15.38",
+            "conclusion": "像素指针贡献最大，DINOv2 与语言条件查询均有正向贡献"
+          },
+          {
+            "dataset": "FU/GU Biometry 2026（不确定性分析，误差定义为偏离真值超过图像对角线 5%）",
+            "metric": "最高熵 10% 预测捕获的错误比例；错误检测 AUROC",
+            "baseline": "随机选择（10%）",
+            "baseline_value": "10%",
+            "proposed_value": "最高熵 10% 捕获 40% 错误；AUROC 心脏 0.70、产前 0.76、产时 0.86",
+            "conclusion": "概率图熵可指示定位失败，支持针对性人工核查"
+          }
+        ],
+        "limitations": [
+          {
+            "description": "评估仅限单一基准上的预定义测量，对未见测量指令、新解剖结构和不同成像条件的泛化性尚未验证",
+            "basis": "讨论部分：“our evaluation is limited to predefined measurements on a single benchmark... Generalization to unseen measurement instructions, anatomical structures, and different imaging conditions remains to be explored.”"
+          },
+          {
+            "description": "数据集高度不平衡（IVC 仅 38 张，AoP 达 4,000 张），可能影响少数视图性能",
+            "basis": "第 4.1 节：“The dataset is highly imbalanced, ranging from 38 labelled images for IVC to 4,000 for AoP.”"
+          },
+          {
+            "description": "官方挑战测试标注不可用，仅在训练集上做五折交叉验证，非官方测试集结果",
+            "basis": "第 4.1 节：“Since the official challenge test annotations are unavailable for offline evaluation, we perform five-fold cross-validation on the labelled data”"
+          },
+          {
+            "description": "不确定性校准与计算效率尚未研究，作者列为未来工作",
+            "basis": "讨论部分：“Future work will investigate these directions, alongside uncertainty calibration and computational efficiency.”"
+          }
+        ],
+        "ship_transfer": {
+          "relevance": "[推测] 船舶场景同样存在大量规则化的多点测量任务（如船体结构变形测量、船载设备/舱室关键点标注、靠泊目标点定位），且需在噪声强、成像条件多变的传感器图像（可见光/红外/声呐）上逐像素判断定位模糊性；用文本测量指令生成查询、与共享密集特征匹配的思路可减少为每类测量单独设计检测头的工程负担。",
+          "adaptations": "[推测] 需替换超声领域编码器为海事场景预训练视觉基础模型；密集融合可引入多传感器特征（可见光、红外、雷达/声呐点云投影）；领域内测量几何函数需替换为船舶测量定义（长度、角度、间距等）；概率图熵可驱动测量结果的人工复核流程。",
+          "research_hypotheses": "[推测] H1：以任务指令生成端点查询的统一框架在船舶多点测量任务中可媲美任务专属检测头，同时显著降低适配新测量定义的标注与工程成本。H2：空间概率图熵可有效识别海上复杂背景（浪花、反光、遮挡）下的定位失败，用于触发人工校验。H3：融合多传感器互补特征相比单一传感器编码器能降低关键点定位误差。"
+        },
+        "open_questions": [
+          "概率图的空间 softmax 在多目标不同尺度下如何校准不确定性，熵是否可作为可靠置信度？",
+          "模型对未见测量指令与新解剖结构（或新船舶目标类别）的零样本泛化能力如何？",
+          "融合三个视觉编码器与高分辨率特征图的计算开销在实时或嵌入式平台（如船载设备）上是否可接受？",
+          "在极端类别不平衡（如仅 38 张样本的视图）下如何保持稳定定位性能？"
+        ]
+      },
+      "evidence": [
+        {
+          "quote": "We propose Kev-Bio, a vision-language model that uses clinical measurement questions to guide ultrasound landmark detection.",
+          "locator": "Abstract, Methods",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Kev-Bio uses decision representations of the language model to generate queries for each caliper endpoint. These queries are matched against shared dense ultrasound features to produce spatial probability maps, from which landmark coordinates and clinical measurements are derived.",
+          "locator": "Abstract, Methods",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "On the nine-view FU/GU Biometry 2026 dataset, Kev-Bio achieves a mean radial error (MRE) of 22.50 pixels and a clinical measurement mean absolute error (MAE) of 15.38, outperforming the compared baselines in overall performance.",
+          "locator": "Abstract, Results",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "each measurement task remains tied to a fixed output head or task-specific parameter set, making adaptation to new anatomical structures or measurement tasks challenging",
+          "locator": "Section 1 Introduction",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "direct coordinate prediction does not explicitly model spatial likelihood distributions, limiting the representation of localization ambiguity",
+          "locator": "Abstract, Purpose",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "We combine visual representations from Qwen3.5 Qwen Team (2026) , USFM Jiao et al. (2024) , and DINOv2 Oquab et al. (2023) to construct a shared dense feature map for anatomical landmark localization.",
+          "locator": "Section 3.2 Dense Ultrasound Feature Fusion",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "The resulting map, F, is L2-normalized along the channel dimension and shared across measurement tasks.",
+          "locator": "Section 3.2 Dense Ultrasound Feature Fusion",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "followed by a spatial softmax to obtain the landmark probability maps",
+          "locator": "Section 3.3 Language Conditioned Pixel Pointer",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Landmark coordinates are calculated using differentiable soft-argmax",
+          "locator": "Section 3.3 Language Conditioned Pixel Pointer",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "We initialize the Qwen3.5 language backbone ( LM ) with the pretrained Kev adapter.",
+          "locator": "Section 3.1 Instruction-guided Multimodal Encoding",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Training jointly supervises the predicted landmark coordinates, their spatial probability maps, and the clinical measurement values calculated from these coordinates.",
+          "locator": "Section 3.4 Heatmap and Measurement Supervision",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "As shown in Table 2 , Kev-Bio achieves the lowest average error on both metrics among the reported methods, with 22.50 pixels MRE and 15.38 MAE, compared with 23.88 and 17.47 for the strongest respective baselines.",
+          "locator": "Section 4.2 Comparison with Prior Methods",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "The improvement is particularly notable in fetal head biometry, where MRE decreases from 17.03 to 13.76 pixels.",
+          "locator": "Section 4.2 Comparison with Prior Methods",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Notably, these results are obtained without using the additional unlabelled challenge data leveraged by CAMS and FMUB.",
+          "locator": "Section 4.2 Comparison with Prior Methods",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "The dataset is highly imbalanced, ranging from 38 labelled images for IVC to 4,000 for AoP.",
+          "locator": "Section 4.1 Dataset and Implementation Details",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Since the official challenge test annotations are unavailable for offline evaluation, we perform five-fold cross-validation on the labelled data, with approximately 1,350 images held out per fold.",
+          "locator": "Section 4.1 Dataset and Implementation Details",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Removing the pixel pointer (replacing spatial localization with direct coordinate regression from the decision states) leads to the largest performance degradation, increasing MRE from 22.50 to 35.50 pixels and MAE from 15.38 to 23.64.",
+          "locator": "Section 4.4 Ablation Study",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Removing DINOv2 also reduces performance, yielding 24.85 MRE and 16.94 MAE",
+          "locator": "Section 4.4 Ablation Study",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Excluding the language model (LLM) and replacing its decision states with learned, image-conditioned measurement queries results in a smaller but consistent increase in error (23.66 MRE and 16.77 MAE)",
+          "locator": "Section 4.4 Ablation Study",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Inspecting the 10% most uncertain predictions captures 40% of errors, compared with 10% under random selection. Error detection AUROCs reach 0.70, 0.76, and 0.86 for cardiac, prenatal, and intrapartum imaging, respectively.",
+          "locator": "Section 4.3 Qualitative Results",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Nevertheless, our evaluation is limited to predefined measurements on a single benchmark, despite spanning multiple anatomical regions. Generalization to unseen measurement instructions, anatomical structures, and different imaging conditions remains to be explored.",
+          "locator": "Section 5 Discussion and Limitations",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Future work will investigate these directions, alongside uncertainty calibration and computational efficiency.",
+          "locator": "Section 5 Discussion and Limitations",
+          "url": "https://arxiv.org/html/2611.03360",
+          "source_type": "arxiv_full_text"
+        }
+      ],
+      "review": {
+        "review_status": "approved",
+        "reviewed_at": "2026-11-04",
+        "method": "separate AI context; exact evidence validation",
+        "model": "deepseek-flash"
+      },
+      "display": {
+        "teaser": "Kev-Bio 将临床测量问题转化为语言模型的决策表示，并以此生成每个卡尺端点的查询，与共享的多编码器密集超声特征图逐像素匹配产生空间概率图，从而在统一框架内完成多视图关键点定位与临床测量。"
+      }
+    }
+  ],
   "issues": [
     {
       "issue_date": "2026-11-04",
-      "status": "empty",
-      "paper_ids": [],
+      "status": "published",
+      "paper_ids": [
+        "arxiv-2611.03360"
+      ],
       "daily_summary": {
         "title": "多模态科研日报",
         "trends": []
