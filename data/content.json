@@ -1,6 +1,16 @@
 {
   "schema_version": "1.0.0",
-  "updated_at": null,
+  "updated_at": "2026-11-04T02:19:52.393345+00:00",
   "papers": [],
-  "issues": []
+  "issues": [
+    {
+      "issue_date": "2026-11-04",
+      "status": "empty",
+      "paper_ids": [],
+      "daily_summary": {
+        "title": "多模态科研日报",
+        "trends": []
+      }
+    }
+  ]
 }
