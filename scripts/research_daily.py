@@ -1,4 +1,5 @@
 """Conservative arXiv daily pipeline. No source text or credentials enter logs."""
+import io
 import argparse, datetime as dt, json, os, re, time, urllib.request, urllib.parse, xml.etree.ElementTree as ET
 from pathlib import Path
 from html.parser import HTMLParser
@@ -63,12 +64,36 @@ def collect():
                        "doi": entry.findtext("{http://arxiv.org/schemas/atom}doi", "")})
     return papers
 
+def full_text(identifier):
+    url = "https://arxiv.org/html/" + identifier
+    try:
+        parser = Text(); parser.feed(request(url)); text = parser.value()
+        if 12000 <= len(text) <= 220000 and "references" in text.lower():
+            return url, text
+    except Exception:
+        pass
+    from pypdf import PdfReader
+    url = "https://arxiv.org/pdf/" + identifier
+    req = urllib.request.Request(url, headers={"User-Agent": "Day-puts/1.0"})
+    with urllib.request.urlopen(req, timeout=90) as res:
+        raw = res.read(20_000_001)
+    if len(raw) > 20_000_000 or not raw.startswith(b"%PDF"): raise ValueError("PDF unavailable or too large")
+    text = " ".join(" ".join((page.extract_text() or "").split()) for page in PdfReader(io.BytesIO(raw)).pages)
+    if len(text) < 12000 or "references" not in text.lower(): raise ValueError("PDF text incomplete")
+    if len(text) > 220000: raise ValueError("full text exceeds budget")
+    return url, text
+
+def error_detail(exc):
+    if isinstance(exc, ValueError) and str(exc).startswith(("full text", "PDF", "invalid evidence", "review rejected", "incomplete")):
+        return str(exc)[:160]
+    return type(exc).__name__ + (": HTTP " + str(exc.code) if hasattr(exc, "code") else "")
+
 def run(dry):
     if not dry and not os.getenv("DEEPSEEK_API_KEY", "").strip():
         raise ValueError("DEEPSEEK_API_KEY is not available to this run; add the repository Actions secret, then start a new run")
     path = Path("data/content.json"); content = json.loads(path.read_text(encoding="utf-8"))
     day = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=8)).date().isoformat()
-    if any(i["issue_date"] == day for i in content["issues"]):
+    if any(i["issue_date"] == day and i.get("paper_ids") for i in content["issues"]):
         return {"status": "already_published", "approved": 0}
     old = content["papers"]
     ids = {canonical(p.get("metadata", {}).get("paper_url", p["paper_id"])) for p in old}
@@ -80,15 +105,13 @@ def run(dry):
         seen.add(norm(p["title"])); candidates.append(p)
     if dry: return {"status": "dry_run", "candidates": len(candidates), "approved": 0, "note": "No AI calls or writes"}
     if not os.getenv("DEEPSEEK_API_KEY"): raise ValueError("DEEPSEEK_API_KEY is required")
-    selected = ai('Select up to five highly relevant novel multimodal technical papers. JSON {"ids": [arxiv_id]}. Use only supplied IDs.', candidates).get("ids", [])
+    selected = ai('Rank up to twelve highly relevant novel multimodal technical papers in descending relevance, including reserves for inaccessible full text. JSON {"ids": [arxiv_id]}. Use only supplied IDs.', candidates).get("ids", [])
     approved = []; skipped = []
-    for p in [p for p in candidates if p["id"] in selected][:5]:
+    for p in sorted([p for p in candidates if p["id"] in selected], key=lambda p: selected.index(p["id"]))[:12]:
+        if len(approved) >= 5: break
         try:
             time.sleep(3)
-            url = "https://arxiv.org/html/" + p["id"]
-            parser = Text(); parser.feed(request(url)); text = parser.value()
-            if len(text) < 12000 or "references" not in text.lower(): raise ValueError("full text unavailable")
-            if len(text) > 220000: raise ValueError("full text exceeds budget")
+            url, text = full_text(p["id"])
             draft = ai('Analyze in Chinese from the entire supplied paper. JSON {title_zh, classification:{primary_module,modalities,keywords}, analysis:{one_line_innovation,research_problem,traditional_approach,traditional_limitations,method_overview,architecture_steps:[{module,input,operation,output}],technical_changes:[{before,change,rationale,benefit}],experiments:[{dataset,metric,baseline,baseline_value,proposed_value,conclusion}],limitations:[{description,basis}],ship_transfer:{relevance,adaptations,research_hypotheses},open_questions}, evidence:[{quote,locator}]}. primary_module must be model_architecture, feature_representation, feature_extraction, cross_modal_alignment, feature_fusion, data, training_optimization, reasoning_decision or system_reliability. Evidence quotes must be exact substrings from source and support every substantive claim. Clearly label speculative ship transfer.', {"metadata": p, "full_text": text})
             evidence = draft["evidence"]
             if not evidence or any(not e.get("quote") or e["quote"] not in text for e in evidence): raise ValueError("invalid evidence")
@@ -102,8 +125,9 @@ def run(dry):
                 "review": {"review_status": "approved", "reviewed_at": day, "method": "separate AI context; exact evidence validation", "model": os.getenv("DEEPSEEK_MODEL", "deepseek-flash")},
                 "display": {"teaser": a["one_line_innovation"]}})
         except Exception as exc:
-            skipped.append({"id": p["id"], "reason": type(exc).__name__})
+            skipped.append({"id": p["id"], "reason": error_detail(exc)})
     content["papers"].extend(approved)
+    content["issues"] = [i for i in content["issues"] if i["issue_date"] != day]
     content["issues"].insert(0, {"issue_date": day, "status": "published" if approved else "empty", "paper_ids": [p["paper_id"] for p in approved], "daily_summary": {"title": "多模态科研日报", "trends": []}})
     content["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
     temp = path.with_suffix(".tmp"); temp.write_text(json.dumps(content, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"); temp.replace(path)
