@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "updated_at": "2026-11-04T03:41:20.956203+00:00",
+  "updated_at": "2026-11-05T00:46:31.485816+00:00",
   "papers": [
     {
       "paper_id": "arxiv-2611.03360",
@@ -655,9 +655,334 @@
       "display": {
         "teaser": "首次在稠密隐空间中将多模态特征显式解耦为共享子空间与模态特有子空间，结合稠密的跨模态对应与冗余缩减目标进行自监督预训练。"
       }
+    },
+    {
+      "paper_id": "arxiv-2611.05097",
+      "metadata": {
+        "title_en": "The Platonic Brain: Representational Convergence in EEG Foundation Models",
+        "title_zh": "柏拉图式大脑：EEG基础模型中的表征收敛",
+        "authors": [
+          "Nicolas Waehner",
+          "Enzo Tagliazucchi",
+          "Jacobo Sitt",
+          "Demian Wassermann",
+          "Giovanni Franco Gabriel Marraffini",
+          "Trinidad Borrell"
+        ],
+        "first_public_date": "2026-11-03",
+        "paper_url": "https://arxiv.org/abs/2611.05097",
+        "doi": "",
+        "publication_status": "preprint"
+      },
+      "classification": {
+        "primary_module": "feature_representation",
+        "modalities": [
+          "EEG",
+          "fMRI",
+          "video",
+          "text"
+        ],
+        "keywords": [
+          "Platonic Representation Hypothesis",
+          "EEG foundation models",
+          "representational convergence",
+          "CKA",
+          "mutual kNN",
+          "cyclic null calibration",
+          "NICE decodability"
+        ]
+      },
+      "analysis": {
+        "one_line_innovation": "作者检验了柏拉图表征假设在EEG基础模型上是否成立，并发现模型能力（由EEG标记的可解码性衡量）与跨家族、跨模态的表征对齐相关，而参数规模并不一定如此。",
+        "research_problem": "独立训练的EEG基础模型是否会随着能力提升而收敛到相似表征（模态内收敛），以及这种收敛是否延伸到视觉和语言模型（跨模态收敛）？",
+        "traditional_approach": "将EEG嵌入与视觉/语言模型表示进行比较时，直接使用原始表征相似度（mKNN、CKA），并常把模型规模或原始对齐分数当作能力与收敛的代理。",
+        "traditional_limitations": "原始对齐会被共享的时间平滑性所膨胀；参数规模并不是EEG模型质量的可靠代理；独立同分布置换零模型会破坏时间结构，从而高估显著性。",
+        "method_overview": "使用14个EEG基础模型（五个家族）、四个视觉模型和两个语言模型。嵌入是冻结的，并在共享窗口网格上提取。对齐通过局部mKNN和全局线性CKA衡量，并用循环平移零模型做校准。能力由NICE可解码性定义：即嵌入对16个EEG标记的岭回归R²均值。相关性在各类家族内做均值中心化后计算。",
+        "architecture_steps": [
+          {
+            "module": "数据与窗口划分",
+            "input": "CineBrain EEG/fMRI及对齐的电视剧片段和字幕",
+            "operation": "按各EEG模型原生的窗口长度划分非重叠窗口；将视觉和语言输入在窗口上进行拼接/匀化",
+            "output": "共享或模型特定的窗口网格（例如REVE为1080个窗口，FEMBA为2160个，ST-EEGFormer为1800个，NeuroLM为1350个）"
+          },
+          {
+            "module": "嵌入提取",
+            "input": "预处理后的EEG、视频片段、字幕",
+            "operation": "将每个冻结模型隐藏层状态在token上做均值池化；视觉模型取逐块类别token；语言模型取逐层掩码均值池化",
+            "output": "每个模型每层每个窗口的向量"
+          },
+          {
+            "module": "零模型校准",
+            "input": "两个模型的嵌入序列",
+            "operation": "将其中一个序列做循环平移；在每个平移下取层对最大值，并计算观测值相对零均值分布的超出量Δ以及精确的置换p值",
+            "output": "校准后的对齐量Δ和p值"
+          },
+          {
+            "module": "能力评分（NICE）",
+            "input": "模型嵌入以及按通道计算标记后取中位数得到的16维EEG标记向量",
+            "operation": "用岭回归按连续块做交叉验证，预测每个标记，并对R²求平均",
+            "output": "NICE可解码性分数"
+          },
+          {
+            "module": "对齐分析",
+            "input": "校准后的对齐矩阵与NICE分数",
+            "operation": "在家族内做均值中心化；对家族内中心化后的数值计算Spearman相关；分别检验模态内（跨家族）和跨模态（与视觉/语言）的关系",
+            "output": "相关性和逐对比较结果"
+          }
+        ],
+        "technical_changes": [
+          {
+            "before": "Gröger et al. 使用独立同分布置换零模型",
+            "change": "改用循环平移（模n旋转）零模型，并对层对最大值做聚合感知校准，枚举所有K=n-1个平移以得到精确p值",
+            "rationale": "独立同分布置换会破坏时间相关结构，产生比数据本身结构更少的零分布，从而低估基线并高估显著性",
+            "benefit": "保留每个信号的自身时间结构；只有内容特异性的对齐在零模型下保留下来；得到精确而非蒙特卡洛的p值"
+          },
+          {
+            "before": "按参数规模作为能力代理",
+            "change": "定义任务无关的NICE可解码性（16个EEG标记上的平均交叉验证R²），并将参数规模单独处理",
+            "rationale": "EEG模型小几个数量级，没有把规模与性能联系起来的缩放律；下游任务性能差异很大",
+            "benefit": "独立于规模评估能力；允许分别检验与能力和与规模的收敛"
+          },
+          {
+            "before": "比较原始对齐分数",
+            "change": "从对齐分数中减去循环零均值（Δ）",
+            "rationale": "原始跨模态对齐会随EEG尺寸增加，但零基线也以相近速率增加",
+            "benefit": "将内容特异性对齐与共享时间平滑性区分开"
+          }
+        ],
+        "experiments": [
+          {
+            "dataset": "CineBrain，第7季第1–10集，6名被试观看《生活大爆炸》，10800秒，13500帧，每帧0.8秒",
+            "metric": "家族内中心化后NICE可解码性与校准后跨家族EEG对齐之间的Spearman相关",
+            "baseline": "循环平移零模型；原始对齐随尺寸变化",
+            "baseline_value": "不适用",
+            "proposed_value": "mKNN p=0.003；CKA p=0.007；78/78个mKNN对和75/78个CKA对在p<0.05下超过循环零模型",
+            "conclusion": "EEG标记可解码性正向预测跨家族对齐，与PRH一致"
+          },
+          {
+            "dataset": "CineBrain，EEG与语言模型（BLOOMZ、OpenLLaMA）跨模态",
+            "metric": "CKA校准后对齐与NICE可解码性之间的相关",
+            "baseline": "循环零模型",
+            "baseline_value": "不适用",
+            "proposed_value": "与语言模型的全局对齐（CKA）更一致地随可解码性增大；针对OpenLLaMA报告了一致的全局对齐",
+            "conclusion": "全局对齐随EEG可解码性增大而与语言模型相关，但mKNN局部对齐没有一致关系"
+          },
+          {
+            "dataset": "CineBrain，EEG与视觉模型（DINOv2、V-JEPA 2、VideoMAE、VideoMAE-K400）跨模态",
+            "metric": "mKNN和CKA校准后对齐与NICE可解码性的关系",
+            "baseline": "循环零模型；原始FEMBA–DINOv2 mKNN随FEMBA尺寸增大",
+            "baseline_value": "原始mKNN随FEMBA尺寸增大",
+            "proposed_value": "与视觉模型的全局对齐更弱或并不一致；对FEMBA–DINOv2而言，超过零的Δ并不随尺寸增大；局部对齐没有一致关联",
+            "conclusion": "跨模态收敛依赖于模态和度量；与视觉的全局对齐弱于与语言的对齐"
+          },
+          {
+            "dataset": "CineBrain fMRI与视觉/语言模型",
+            "metric": "与fMRI的mKNN对齐",
+            "baseline": "循环零模型",
+            "baseline_value": "零模型几乎完全跟随观测线",
+            "proposed_value": "高于零的裕度远大于EEG；更大的模型并未获得内容特异性增益",
+            "conclusion": "更大的模型带来的增益主要是共享时间平滑性，与EEG模式一致"
+          },
+          {
+            "dataset": "家族内尺寸对（除REVE外每个家族两个最小和两个最大）",
+            "metric": "家族内校准后mKNN和CKA",
+            "baseline": "循环零模型",
+            "baseline_value": "不适用",
+            "proposed_value": "每个家族的校准后mKNN都从较小对到较大对增加；只有FEMBA在CKA上增加",
+            "conclusion": "家族内局部对齐随尺寸增加，但这一比较受到共享架构和数据的混淆；被排除在主分析之外"
+          }
+        ],
+        "limitations": [
+          {
+            "description": "统计功效有限：只有14个模型、5个家族和6名被试",
+            "basis": "“The analyses included only 14 models from five families and six participants, limiting statistical power.”"
+          },
+          {
+            "description": "EEG与视频/语言之间的邻域相似性仅适度超过时间平移零模型；部分对齐可能反映共享时间平滑性而非内容特异性结构",
+            "basis": "“neighbourhood similarity between EEG and video or language representations exceeded the time-shifted control only modestly, suggesting that part of the observed alignment may reflect shared temporal smoothness rather than content-specific structure.”"
+          },
+          {
+            "description": "所有分析仅依赖单一数据集，限制泛化性",
+            "basis": "“all analyses relied on a single dataset, limiting the generalisability of our conclusions.”"
+          },
+          {
+            "description": "全局几何捕获语义结构的解释虽然与数据一致，但未被直接检验",
+            "basis": "“This interpretation is consistent with our data but was not tested directly.”"
+          },
+          {
+            "description": "收敛与规模的关系仍未确定，因为EEG模型尺寸范围狭窄",
+            "basis": "“Whether EEG representations converge with scale per se, as the PRH predicts for vision and language, remains open and may require EEG models spanning a wider range of sizes.”"
+          }
+        ],
+        "ship_transfer": {
+          "relevance": "该方法论提供了一种任务无关方式，用于比较模型表征漂移与收敛，而无需依赖目标船舶的标注标签。在船舶领域，标注数据（故障、状态、机动）通常稀缺或与特定船型绑定，因此循环平移零模型校准和基于标记的可解码性可以作为交叉检查新的船舶EEG/传感器基础模型是否学到内容特异性结构，还是仅仅利用共享时间平滑性的方法。",
+          "adaptations": [
+            "将NICE风格标记集替换为船舶相关标记（例如推进系统频带功率、机械振动频谱熵、Hjorth参数、跨通道中位数），并确保它们反映系统状态而非仅反映时间趋势。",
+            "使用循环平移零模型时，需针对船舶长时间序列的周期结构（装卸循环、值班表）进行调整，以避免与重复操作模式对齐。",
+            "使用闭环中的AIS/摄像头/日志字幕或船舶传感器字幕代替电视字幕，作为跨模态配对，并保持窗口对齐。",
+            "将模型家族分组从五个EEG家族改为船舶传感器基础模型家族（例如按船型或传感器模态），并保持家族内中心化。",
+            "在控制传感窗口长度和模型规模的同时，报告标记可解码性和校准后对齐。"
+          ],
+          "research_hypotheses": [
+            "在船舶传感器基础模型之间，校准后对齐（超过循环零）随标记可解码性增大而增大。",
+            "与文本/日志的全局（CKA）对齐强于与摄像头或振动传感器的对齐，而局部（mKNN）对齐可能与短时机械特征而非语义状态相关。",
+            "在没有船舶特定缩放律的情况下，参数数量与可解码性之间的关系较弱；增加容量并不保证更高的内容特异性对齐。[推测性]",
+            "将循环零模型用于船舶时间序列将揭示，模型规模相关的原始对齐增益中有多少可归因于值班或航行平滑性。[推测性]"
+          ]
+        },
+        "open_questions": [
+          "收敛是否在跨更大EEG模型范围时随规模发生，而不仅仅随能力发生？",
+          "什么具体机制导致与语言而非视觉的全局对齐？",
+          "根据循环零模型，局部邻域相似性是否由低层感官特征主导？",
+          "该结果能否在CineBrain之外的多个数据集和更多被试上泛化？",
+          "这些对齐指标能否作为EEG基础模型的可靠无任务基准，尤其在下游基准不一致的临床环境中？"
+        ]
+      },
+      "evidence": [
+        {
+          "quote": "The Platonic Representation Hypothesis (PRH) predicts that artificial neural networks converge on shared representations as scale and performance increase.",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "We found that EEG models with greater decodability showed stronger cross-family alignment in both local neighbourhood similarity and global structure, not consistently increasing with model parameter count.",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Cross-modal convergence was modality and metric dependent: greater EEG decodability was associated with stronger global alignment to language, but not consistently to vision models, while local alignment showed no consistent association.",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "For EEG we use 14 models from five families: FEMBA ( Tegon et al., 2025 ) , LUNA ( Döner et al., 2025 ) , NeuroLM ( Jiang et al., 2025 ) , ST-EEGFormer ( Yang et al., 2026 ) and REVE ( El Ouahidi et al., 2025 ) .",
+          "locator": "Section 2, Models",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "For vision we use DINOv2 ( Oquab et al., 2023 ) , V-JEPA 2 ( Assran et al., 2025 ) , and VideoMAE together with its Kinetics-finetuned version ( Tong et al., 2022 ) . For language we use BLOOMZ ( Muennighoff et al., 2023 ) and OpenLLaMA ( Geng and Liu, 2023 )",
+          "locator": "Section 2, Models",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Following Huh et al. (2024) and Gröger et al. (2026) , we use mutual k k -nearest-neighbour overlap (mKNN) at k = 5 k=5 for the local question and linear CKA ( Kornblith et al., 2019 ) for the global one.",
+          "locator": "Section 2, Metrics",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "The i.i.d. permutation of Gröger et al. (2026) would destroy that time correlation, drawing the null from a distribution with strictly less structure than the data, so it understates the baseline and overstates significance.",
+          "locator": "Section 2, Metrics calibration",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "we keep it and use the cyclic group of circular shifts, rigidly rotating one signal against the other. This breaks the correspondence between the two while leaving each one’s own temporal structure intact, so what survives is content-specific alignment rather than shared smoothness.",
+          "locator": "Section 2, Metrics calibration",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "We define NICE decodability as the mean cross-validated R 2 R^{2} with which a model’s embeddings predict these markers.",
+          "locator": "Section 2, A task-free Quality axis",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "For each model, we averaged its excess alignment over the cyclic-null mean across all cross-family comparisons and mean-centred both alignment and decodability within family (Figure 1 ).",
+          "locator": "Section 3.1",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Decodability correlated positively with both mKNN ( p = 0.003 p=0.003 ) and CKA ( p = 0.007 p=0.007 ), consistent with the predictions of the PRH",
+          "locator": "Section 3.1",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "At the pairwise level, 78/78 mKNN and 75/78 CKA comparisons exceeded the cyclic null at p < 0.05 p<0.05 .",
+          "locator": "Section 3.1",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Raw mKNN between FEMBA and DINOv2 increases with EEG model size, but the cyclic-null baseline increases at a comparable rate.",
+          "locator": "Section 3.2",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Although raw alignment increases with FEMBA size, the null-centred value does not increase consistently.",
+          "locator": "Figure 2 caption",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Alignment does not consistently correlate with NICE decodability for either vision or language models when measured with mKNN. In contrast, CKA shows a more consistent relationship with decodability, particularly for language models.",
+          "locator": "Section 3.2",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "One possible explanation is that low-level sensory features dominate local EEG neighbourhoods, whereas CKA summarizes global geometry across all samples and may therefore capture weaker, distributed similarities associated with shared semantic content.",
+          "locator": "Section 4",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "The analyses included only 14 models from five families and six participants, limiting statistical power.",
+          "locator": "Section 4",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "neighbourhood similarity between EEG and video or language representations exceeded the time-shifted control only modestly, suggesting that part of the observed alignment may reflect shared temporal smoothness rather than content-specific structure.",
+          "locator": "Section 4",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Finally, all analyses relied on a single dataset, limiting the generalisability of our conclusions.",
+          "locator": "Section 4",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Within families, larger models showed higher calibrated local alignment (mKNN) but not global alignment (CKA), a comparison confounded by shared architectures and training data (App. E ).",
+          "locator": "Section 4",
+          "url": "https://arxiv.org/html/2611.05097",
+          "source_type": "arxiv_full_text"
+        }
+      ],
+      "review": {
+        "review_status": "approved",
+        "reviewed_at": "2026-11-05",
+        "method": "separate AI context; exact evidence validation",
+        "model": "deepseek-flash"
+      },
+      "display": {
+        "teaser": "作者检验了柏拉图表征假设在EEG基础模型上是否成立，并发现模型能力（由EEG标记的可解码性衡量）与跨家族、跨模态的表征对齐相关，而参数规模并不一定如此。"
+      }
     }
   ],
   "issues": [
+    {
+      "issue_date": "2026-11-05",
+      "status": "published",
+      "paper_ids": [
+        "arxiv-2611.05097"
+      ],
+      "daily_summary": {
+        "title": "多模态科研日报",
+        "trends": []
+      }
+    },
     {
       "issue_date": "2026-11-04",
       "status": "published",
