@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "updated_at": "2026-11-05T00:46:31.485816+00:00",
+  "updated_at": "2026-11-06T00:44:57.996870+00:00",
   "papers": [
     {
       "paper_id": "arxiv-2611.03360",
@@ -969,9 +969,699 @@
       "display": {
         "teaser": "作者检验了柏拉图表征假设在EEG基础模型上是否成立，并发现模型能力（由EEG标记的可解码性衡量）与跨家族、跨模态的表征对齐相关，而参数规模并不一定如此。"
       }
+    },
+    {
+      "paper_id": "arxiv-2301.12597",
+      "metadata": {
+        "title_en": "BLIP-2: Bootstrapping Language-Image Pre-training with Frozen Image Encoders and Large Language Models",
+        "title_zh": "【经典回顾】BLIP-2：以冻结图像编码器与大语言模型引导的语言-图像预训练",
+        "authors": [
+          "Junnan Li",
+          "Dongxu Li",
+          "Silvio Savarese",
+          "Steven Hoi"
+        ],
+        "first_public_date": "2023-01-30",
+        "paper_url": "https://arxiv.org/abs/2301.12597",
+        "doi": "",
+        "publication_status": "preprint"
+      },
+      "classification": {
+        "primary_module": "model_architecture",
+        "modalities": [
+          "image",
+          "text"
+        ],
+        "keywords": [
+          "Querying Transformer",
+          "Q-Former",
+          "frozen image encoder",
+          "frozen LLM",
+          "vision-language pre-training",
+          "zero-shot VQA",
+          "image captioning",
+          "image-text retrieval",
+          "two-stage pre-training"
+        ]
+      },
+      "analysis": {
+        "one_line_innovation": "提出轻量级 Querying Transformer（Q-Former）作为冻结图像编码器与冻结大语言模型之间的信息瓶颈，通过两阶段预训练（表征学习+生成学习）以极少可训练参数实现跨模态对齐。",
+        "research_problem": "现有视觉-语言预训练需端到端训练大规模模型，计算成本高昂，且难以灵活利用已开源的强单模态预训练模型（视觉编码器与 LLM）。",
+        "traditional_approach": "Frozen 微调图像编码器并将输出直接作为 LLM 软提示；Flamingo 在 LLM 中插入交叉注意力层并在数十亿图文对上预训练新层，两者均仅使用语言建模损失。",
+        "traditional_limitations": "仅用图像到文本生成损失不足以弥合模态鸿沟；端到端训练计算代价高、难以复用现成单模态模型，且冻结 LLM 时视觉-语言对齐尤为困难，易出现灾难性遗忘。",
+        "method_overview": "BLIP-2 使用一组可学习查询向量构成的 Q-Former（含共享自注意力的图像 Transformer 与文本 Transformer）从冻结图像编码器抽取固定数量视觉特征，两阶段预训练：第一阶段联合优化 ITC/ITG/ITM 三项表征学习目标；第二阶段经全连接层将查询输出投影为软视觉提示前置到冻结 LLM 输入，进行生成式学习。",
+        "architecture_steps": [
+          {
+            "module": "冻结图像编码器",
+            "input": "输入图像（224×224，随机裁剪与水平翻转）",
+            "operation": "使用 CLIP ViT-L/14 或 EVA-CLIP ViT-g/14，去掉最后一层并取倒数第二层输出特征",
+            "output": "冻结的视觉特征序列（如 ViT-L/14 为 257×1024）"
+          },
+          {
+            "module": "Q-Former 图像 Transformer",
+            "input": "32 个可学习查询嵌入（维度 768）+ 冻结视觉特征",
+            "operation": "查询经自注意力交互，并通过每隔一个 transformer 块插入的交叉注意力层与冻结图像特征交互",
+            "output": "输出查询表示 Z（32×768），作为信息瓶颈"
+          },
+          {
+            "module": "Q-Former 文本 Transformer（第一阶段）",
+            "input": "图文对中的文本",
+            "operation": "与查询共享自注意力层，按不同目标施加不同自注意力掩码（单模态/多模态因果/双向）；联合优化 ITC（对齐查询输出与 [CLS] 文本表示，用批内负样本）、ITG（[DEC] 起始的多模态因果掩码文本生成）、ITM（二分类匹配，难负样本挖掘）",
+            "output": "语言相关的视觉表征与图文匹配分数"
+          },
+          {
+            "module": "全连接投影层（第二阶段）",
+            "input": "Q-Former 输出查询嵌入 Z",
+            "operation": "线性投影到 LLM 文本嵌入维度",
+            "output": "软视觉提示向量"
+          },
+          {
+            "module": "冻结 LLM",
+            "input": "投影后的查询嵌入前置拼接输入文本嵌入",
+            "operation": "解码器 LLM（OPT）用语言建模损失；编码器-解码器 LLM（FlanT5）用前缀语言建模损失（前缀文本+视觉表示入编码器，后缀为生成目标）",
+            "output": "条件于视觉表示的文本生成"
+          }
+        ],
+        "technical_changes": [
+          {
+            "before": "Frozen 微调图像编码器，输出直接作为 LLM 软提示；Flamingo 在 LLM 内插入交叉注意力层并预训练新层，仅用语言建模损失",
+            "change": "引入 188M 参数的 Q-Former 作为冻结图像编码器与冻结 LLM 之间的信息瓶颈，并采用两阶段预训练（先表征学习后生成学习）",
+            "rationale": "LLM 单模态预训练时未见图像，冻结后对齐困难；仅靠生成损失不足以弥合模态鸿沟",
+            "benefit": "显著降低可训练参数与计算成本，同时提升零样本 VQA 等任务性能；减少 LLM 学习对齐负担，缓解灾难性遗忘"
+          },
+          {
+            "before": "BLIP 使用动量队列构造对比学习负样本",
+            "change": "因冻结图像编码器可容纳更多样本，ITC 改用批内负样本",
+            "rationale": "冻结编码器使每 GPU 可放更多样本",
+            "benefit": "简化实现并保持对比学习效果"
+          },
+          {
+            "before": "端到端预训练固定使用图像编码器最后一层输出",
+            "change": "去掉 ViT 最后一层，使用倒数第二层输出特征",
+            "rationale": "论文报告该做法性能略优",
+            "benefit": "略微提升性能"
+          }
+        ],
+        "experiments": [
+          {
+            "dataset": "VQAv2（test-dev，零样本）",
+            "metric": "VQA acc.",
+            "baseline": "Flamingo80B",
+            "baseline_value": "56.3",
+            "proposed_value": "65.0",
+            "conclusion": "BLIP-2 以约 54 倍更少可训练参数超越 Flamingo80B 8.7%"
+          },
+          {
+            "dataset": "NoCaps（val，零样本）",
+            "metric": "CIDEr",
+            "baseline": "BLIP",
+            "baseline_value": "113.2",
+            "proposed_value": "121.6",
+            "conclusion": "零样本图像描述取得当时最优，泛化到域外图像能力强"
+          },
+          {
+            "dataset": "Flickr30K（test，零样本）",
+            "metric": "TR@1（图像→文本）",
+            "baseline": "BLIP",
+            "baseline_value": "96.7",
+            "proposed_value": "97.6",
+            "conclusion": "零样本文本检索达到当时最优"
+          },
+          {
+            "dataset": "Flickr30K（test，零样本）",
+            "metric": "IR@1（文本→图像）",
+            "baseline": "BLIP",
+            "baseline_value": "86.7",
+            "proposed_value": "89.7",
+            "conclusion": "零样本图像检索达到当时最优"
+          },
+          {
+            "dataset": "OK-VQA（test，零样本）",
+            "metric": "VQA acc.",
+            "baseline": "Flamingo80B",
+            "baseline_value": "50.6",
+            "proposed_value": "45.9",
+            "conclusion": "BLIP-2 在此项次于 Flamingo80B，作者归因于其 LLM 知识量较小（11B FlanT5 XXL vs 70B Chinchilla）"
+          },
+          {
+            "dataset": "COCO Caption（Karpathy test，微调）",
+            "metric": "CIDEr",
+            "baseline": "Flamingo",
+            "baseline_value": "138.1",
+            "proposed_value": "145.8",
+            "conclusion": "微调后图像描述性能超过 Flamingo"
+          },
+          {
+            "dataset": "VQAv2（test-dev，微调，开放式生成）",
+            "metric": "VQA acc.",
+            "baseline": "Flamingo80B",
+            "baseline_value": "82.00",
+            "proposed_value": "82.19",
+            "conclusion": "在开放式生成模型中达到当时最优"
+          },
+          {
+            "dataset": "COCO 图文检索（5K test，微调）",
+            "metric": "TR@1（图像→文本）",
+            "baseline": "BLIP",
+            "baseline_value": "82.4",
+            "proposed_value": "85.4",
+            "conclusion": "ITG 损失进一步改善检索，验证查询抽取语言相关视觉特征的设计直觉"
+          }
+        ],
+        "limitations": [
+          {
+            "description": "未观察到上下文少样本学习带来的 VQA 提升",
+            "basis": "预训练数据每个样本仅含单个图文对，LLM 无法学习单序列内多图文对间的关联；Flamingo 论文亦报告相同观察"
+          },
+          {
+            "description": "图像到文本生成可能因 LLM 知识不准确、推理路径错误或缺少新图像内容的最新信息而产生不佳结果",
+            "basis": "Limitation 节明确列出，并由 Figure 7 的错误示例佐证"
+          },
+          {
+            "description": "因使用冻结模型而继承 LLM 风险，如输出冒犯性语言、传播社会偏见或泄露隐私信息",
+            "basis": "Limitation 节明确说明，并建议用指令引导生成或过滤数据集"
+          },
+          {
+            "description": "OK-VQA 上落后于 Flamingo80B",
+            "basis": "Table 2 显示 45.9 vs 50.6，作者假设与 LLM 世界知识量有关"
+          }
+        ],
+        "ship_transfer": {
+          "relevance": "该工作是通用视觉-语言架构方法，非船舶领域研究；其冻结单模态模型+轻量适配器的思路对船舶视觉语言应用（如船载摄像头图像问答、海事报告生成、船舶图像检索）具间接参考价值。",
+          "adaptations": "（以下为推测）可将冻结图像编码器换为在船舶/海事图像上预训练的视觉模型，冻结 LLM 换为海事领域语言模型；Q-Former 在海事图文对（船舶照片-描述、航行日志-场景）上按两阶段训练；VQA 微调时将问题令牌输入 Q-Former 以引导关注船体区域。",
+          "research_hypotheses": "（推测）1）在冻结海事领域视觉编码器与通用 LLM 间插入 Q-Former 可低成本构建船载视觉问答系统；2）在海事图文对上进行第一阶段表征学习可缓解领域偏移下冻结 LLM 的对齐困难；3）若获得交错多图文对的海事序列数据，或可激发上下文少样本学习能力。"
+        },
+        "open_questions": [
+          "如何构建含单序列多图文对的交错预训练数据以激发 LLM 的上下文少样本学习能力？",
+          "Q-Former 的信息瓶颈是否会丢失细粒度视觉信息，限制需要精细空间推理的任务？",
+          "如何在不破坏冻结 LLM 的前提下抑制其偏见与隐私泄露风险？",
+          "更强的视觉编码器或更强的 LLM 均带来提升，二者规模应如何权衡？"
+        ]
+      },
+      "evidence": [
+        {
+          "quote": "The cost of vision-and-language pre-training has become increasingly prohibitive due to end-to-end training of large-scale models.",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "BLIP-2 bridges the modality gap with a lightweight Querying Transformer, which is pre-trained in two stages.",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "our model outperforms Flamingo80B by 8.7% on zero-shot VQAv2 with 54x fewer trainable parameters.",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "existing methods ( e . g . Frozen ( Tsimpoukelli et al., 2021 ) , Flamingo ( Alayrac et al., 2022 ) ) resort to an image-to-text generation loss, which we show is insufficient to bridge the modality gap.",
+          "locator": "Section 1 Introduction",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Q-Former is a lightweight transformer which employs a set of learnable query vectors to extract visual features from the frozen image encoder.",
+          "locator": "Section 1 Introduction",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "It acts as an information bottleneck between the frozen image encoder and the frozen LLM",
+          "locator": "Section 1 Introduction",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Q-Former consists of two transformer submodules that share the same self-attention layers: (1) an image transformer that interacts with the frozen image encoder for visual feature extraction, (2) a text transformer that can function as both a text encoder and a text decoder.",
+          "locator": "Section 3.1 Model Architecture",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "We initialize Q-Former with the pre-trained weights of BERT base",
+          "locator": "Section 3.1 Model Architecture",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "In total, Q-Former contains 188M parameters.",
+          "locator": "Section 3.1 Model Architecture",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "we use 32 queries where each query has a dimension of 768",
+          "locator": "Section 3.1 Model Architecture",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "we jointly optimize three pre-training objectives that share the same input format and model parameters.",
+          "locator": "Section 3.2",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "we use in-batch negatives instead of the momentum queue in BLIP.",
+          "locator": "Section 3.2",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "We employ a multimodal causal self-attention mask to control query-text interaction",
+          "locator": "Section 3.2",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "We adopt the hard negative mining strategy",
+          "locator": "Section 3.2",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "we use a fully-connected (FC) layer to linearly project the output query embeddings Z Z into the same dimension as the text embedding of the LLM.",
+          "locator": "Section 3.3",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "For decoder-based LLMs, we pre-train with the language modeling loss",
+          "locator": "Section 3.3",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "For encoder-decoder-based LLMs, we pre-train with the prefix language modeling loss",
+          "locator": "Section 3.3",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "We use the same pre-training dataset as BLIP with 129M images in total",
+          "locator": "Section 3.4",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "We remove the last layer of the ViT and uses the second last layer’s output features, which leads to slightly better performance.",
+          "locator": "Section 3.4",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "BLIP-2 achieves state-of-the-art result on the VQAv2 ( Goyal et al., 2017 ) and GQA ( Hudson & Manning, 2019 ) datasets.",
+          "locator": "Section 4.1",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Without representation learning, the Q-Former fails the bridge the modality gap, leading to significantly lower performance on zero-shot VQA.",
+          "locator": "Section 4.1 / Figure 5",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "OPT suffers from catastrophic forgetting where performance drastically degrades as training proceeds.",
+          "locator": "Section 4.1 / Figure 5",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "We keep the LLM frozen during finetuning, and updates the parameters of the Q-Former together with the image encoder.",
+          "locator": "Section 4.2",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "In Table 6 , we show that the ITG (image-grounded text generation) loss is also beneficial for image-text retrieval.",
+          "locator": "Section 4.4",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "our experiments with BLIP-2 do not observe an improved VQA performance when providing the LLM with in-context VQA examples.",
+          "locator": "Section 5 Limitation",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "due to the use of frozen models, BLIP-2 inherits the risks of LLMs, such as outputting offensive language, propagating social bias, or leaking private information.",
+          "locator": "Section 5 Limitation",
+          "url": "https://arxiv.org/html/2301.12597",
+          "source_type": "arxiv_full_text"
+        }
+      ],
+      "review": {
+        "review_status": "approved",
+        "reviewed_at": "2026-11-06",
+        "method": "separate AI context; exact evidence validation",
+        "model": "deepseek-flash"
+      },
+      "display": {
+        "teaser": "【经典回顾 · BLIP-2】提出轻量级 Querying Transformer（Q-Former）作为冻结图像编码器与冻结大语言模型之间的信息瓶颈，通过两阶段预训练（表征学习+生成学习）以极少可训练参数实现跨模态对齐。"
+      }
+    },
+    {
+      "paper_id": "arxiv-2611.06206",
+      "metadata": {
+        "title_en": "Loop Before You Leap: What Recurrent Depth Can and Cannot Buy in Data-Limited Pretraining",
+        "title_zh": "先循环再跨越：循环深度在数据受限预训练中能带来什么、不能带来什么",
+        "authors": [
+          "Daichi Hotta",
+          "Yohei Kobashi",
+          "Takeshi Kojima",
+          "Yusuke Iwasawa",
+          "Yutaka Matsuo"
+        ],
+        "first_public_date": "2026-11-04",
+        "paper_url": "https://arxiv.org/abs/2611.06206",
+        "doi": "",
+        "publication_status": "preprint"
+      },
+      "classification": {
+        "primary_module": "model_architecture",
+        "modalities": [
+          "text",
+          "image"
+        ],
+        "keywords": [
+          "Looped Transformer",
+          "Recurrent Depth",
+          "Weight Sharing",
+          "BabyLM",
+          "Multimodal Pretraining",
+          "BLiMP",
+          "DINOv2",
+          "Data-Limited Pretraining"
+        ]
+      },
+      "analysis": {
+        "one_line_innovation": "在100M词预算下用同一实现系统比较标准与循环Transformer，发现循环深度在等推理算力下优于加层深度，但不能缓解多模态训练带来的BLiMP下降。",
+        "research_problem": "多模态训练在BabyLM等数据受限场景中常使语言模型的语法泛化（BLiMP）低于纯文本基线；作者检验「增加循环计算（复用层、不加参数和数据）」能否缩小这一多模态差距。",
+        "traditional_approach": "常规做法是增加Transformer层数（如12层扩到24/48层）来增加计算量，或用预训练多模态模型加递归/循环处理（RecursiveVLM、HIVE）来整合视觉信息。",
+        "traditional_limitations": "增加独立层会带来参数量增长，且在数据受限时加深标准模型反而使BLiMP单调下降（75.21→73.84→70.80）；已有递归多模态工作多基于预训练模型，未在从零训练、100M词预算下检验循环计算对语法泛化的作用。",
+        "method_overview": "采用单一decoder-only Transformer实现，骨干12层LLaMA式结构；标准模型应用1次，循环模型共享权重应用K=4次，并在每次循环后注入原始文本嵌入。视觉端用冻结DINOv2 ViT-B/14输出单768维向量，经MLP连接器作为前缀token注入，可选在前N_inj次循环刷新。",
+        "architecture_steps": [
+          {
+            "module": "文本嵌入",
+            "input": "文本token序列x",
+            "operation": "查表得到E(x)",
+            "output": "文本嵌入序列"
+          },
+          {
+            "module": "视觉编码与连接器",
+            "input": "图像",
+            "operation": "冻结DINOv2 ViT-B/14提取单768维向量v，经两层MLP(P)映射到模型空间",
+            "output": "视觉前缀向量P(v)"
+          },
+          {
+            "module": "初始拼接",
+            "input": "P(v)与E(x)",
+            "operation": "h(0)=[P(v);E(x)]（纯文本时h(0)=E(x)）",
+            "output": "初始隐状态"
+          },
+          {
+            "module": "共享核心栈（循环K次）",
+            "input": "h(k-1)",
+            "operation": "h(k)=Core(h(k-1)+1[k≤N_inj][P(v);0]) + a[0;E(x)]，循环模型a=1",
+            "output": "循环K次后的隐状态h(K)"
+          },
+          {
+            "module": "输出头",
+            "input": "h(K)",
+            "operation": "RMSNorm+输出投影（与输入嵌入共享权重）",
+            "output": "下一token预测"
+          }
+        ],
+        "technical_changes": [
+          {
+            "before": "用更多独立层（24/48层）增加计算",
+            "change": "用12层共享权重循环4次（K=4）达到48次层应用",
+            "rationale": "在固定词预算下把额外计算花在复用同一组权重上，而非新增参数",
+            "benefit": "等推理算力下BLiMP比48层标准模型高5.36点（纯文本）/3.67点（多模态）"
+          },
+          {
+            "before": "标准单向层堆叠",
+            "change": "循环模型在每次核心应用后重新注入原始文本嵌入（text-input injection, a=1）",
+            "rationale": "防止循环过程中原始token信息被稀释",
+            "benefit": "构成循环架构的一部分，但该设计与循环本身在对比中未分离"
+          },
+          {
+            "before": "单次视觉前缀注入",
+            "change": "可选视觉刷新：在前N_inj=2次循环前重复加入P(v)",
+            "rationale": "检验多次视觉注入是否有助于利用视觉信息",
+            "benefit": "视觉刷新使BLiMP平均变化+0.07点，无明确收益证据"
+          },
+          {
+            "before": "学习MLP连接器",
+            "change": "测试恒等连接器（直接传入视觉向量）",
+            "rationale": "视觉特征与隐藏状态均为768维",
+            "benefit": "标准模型恒等连接器72.48 vs MLP 71.37，差异不显著；循环模型两者相近"
+          }
+        ],
+        "experiments": [
+          {
+            "dataset": "BabyLM 2026 Strict文本（100M词）+ 2024 BabyLM多模态caption",
+            "metric": "BLiMP准确率(%)",
+            "baseline": "48层标准Transformer（纯文本）",
+            "baseline_value": 70.8,
+            "proposed_value": 76.16,
+            "conclusion": "等推理算力下12层循环4次的循环模型高出5.36点"
+          },
+          {
+            "dataset": "同上",
+            "metric": "BLiMP准确率(%)",
+            "baseline": "12层标准Transformer（纯文本）",
+            "baseline_value": 75.21,
+            "proposed_value": 76.16,
+            "conclusion": "等参数下循环模型高0.95点，三seed下不显著(p≈0.12)"
+          },
+          {
+            "dataset": "同上",
+            "metric": "BLiMP准确率(%)",
+            "baseline": "12层标准Transformer（多模态）",
+            "baseline_value": 71.37,
+            "proposed_value": 72.31,
+            "conclusion": "多模态下循环模型高约0.94点，三个seed对均正向"
+          },
+          {
+            "dataset": "同上",
+            "metric": "BLiMP准确率(%)",
+            "baseline": "std_mm vs loop_mm_prefix",
+            "baseline_value": -3.84,
+            "proposed_value": -3.79,
+            "conclusion": "两种架构的多模态下降相近，DiD=-0.01，95%CI[-1.44,1.41]，循环未缓解差距"
+          },
+          {
+            "dataset": "同上",
+            "metric": "BLiMP准确率(%)",
+            "baseline": "loop_mm_prefix无图像匹配控制",
+            "baseline_value": 70.46,
+            "proposed_value": 72.31,
+            "conclusion": "视觉前缀平均提升1.85点，95%CI[-1.67,5.37]，三seed下不确定"
+          },
+          {
+            "dataset": "同上",
+            "metric": "BLiMP准确率(%)",
+            "baseline": "loop_mm_prefix无图像匹配控制",
+            "baseline_value": 70.46,
+            "proposed_value": 76.16,
+            "conclusion": "原纯文本模型比匹配无图像控制高5.71点，95%CI[2.73,8.68]，提示语言数据与批次变化是下降主因"
+          },
+          {
+            "dataset": "50,000条caption（打乱特征诊断）",
+            "metric": "caption NLL(nats/token)增量",
+            "baseline": "std_mm正确特征",
+            "baseline_value": 1.87,
+            "proposed_value": 3.33,
+            "conclusion": "打乱特征使loss增加1.45（loop_mm为1.52），说明模型确实使用视觉信息"
+          },
+          {
+            "dataset": "2024 BabyLM vqa_filtered",
+            "metric": "VQA准确率(%)",
+            "baseline": "std_mm正确特征",
+            "baseline_value": 47.4,
+            "proposed_value": 47.4,
+            "conclusion": "无循环条件超过std_mm的47.4%，未发现循环带来VQA收益"
+          }
+        ],
+        "limitations": [
+          {
+            "description": "每个主条件仅3个seed，统计功效有限，接近零的交互估计不能证明无效应",
+            "basis": "Limitations: 'Each main condition was trained with three random seeds. This limits our ability to detect small differences between architectures.'"
+          },
+          {
+            "description": "多模态训练同时替换一半文本为caption并改变保留文本的领域分布，视觉输入与语言数据变化混杂",
+            "basis": "Limitations: 'The resulting BLiMP drop therefore combines changes in language data with the addition of visual input.'"
+          },
+          {
+            "description": "批次匹配无图像控制仅限循环模型，无法在两种架构间比较各成分贡献",
+            "basis": "Limitations: 'This matched comparison is limited to the looped model, so we cannot determine whether either component differs between architectures.'"
+          },
+          {
+            "description": "循环与文本输入注入贡献未分离，对比同时包含两者",
+            "basis": "Limitations: 'Our comparison therefore does not separate the contribution of repeated layer applications from that of text-input injection.'"
+          },
+          {
+            "description": "主实验用单一全局视觉向量，未保留空间细节",
+            "basis": "Limitations: 'Our main experiments represent each image with a single global feature vector.'"
+          },
+          {
+            "description": "BLiMP分数下降可能反映训练语言与基准句不匹配，而非仅语法泛化弱",
+            "basis": "Limitations: 'Lower scores may reflect weaker grammatical generalization, a mismatch between the language encountered during training and the benchmark sentences, or both.'"
+          },
+          {
+            "description": "仅一种模型族、tokenizer、训练目标和K=4循环次数，其它设置在单seed下",
+            "basis": "Limitations: 'We use a single decoder-only model family, tokenizer, and training objective. The main looped models use four iterations, and experiments with two or eight iterations use only one seed per condition'"
+          }
+        ],
+        "ship_transfer": {
+          "relevance": "船舶/海事场景常需在有限标注与受限数据预算下融合AIS、雷达、视觉与文本报告；该论文关于'循环计算 vs 加层深度'和'多模态下降来源分解'的方法论可用于船上多源感知模型设计。",
+          "adaptations": [
+            "将DINOv2单向量前缀替换为船舶视觉/雷达目标特征（如多目标检测框或航迹向量），评估单向量与patch级特征在等算力下的差异",
+            "以词预算类比样本预算，在受限航迹/标注量下比较共享权重循环层与加深网络",
+            "设计无视觉/无雷达的匹配控制（相同数据分布与批次），分解'传感器融合增益'与'数据组成偏移（如特定航道/船型占比变化）'"
+          ],
+          "research_hypotheses": [
+            "在船载受限数据下，共享权重循环深度对航行态势理解任务的收益可能大于等算力加深网络，但该收益在引入视觉后可能不保持",
+            "多传感器融合后任务指标下降可能主要来自数据组成与批处理变化（如航道分布偏移），而非传感器输入本身无用",
+            "当模型能显式将指令/报文片段与目标/事件对齐时，融合才对结构化推理（如避碰规则判断）产生泛化收益——此为作者讨论中提出但未验证的假设"
+          ]
+        },
+        "open_questions": [
+          "循环计算在多模态下未缓解BLiMP下降，是否存在其它循环注入方式（如token级门控）能改变结论？",
+          "如何在两种架构间都做匹配的无图像/无视觉控制，从而把语言数据变化与视觉贡献在架构层面分离？",
+          "需要怎样的显式机制把话语片段与视觉对象/事件关联，才能让视觉grounding改善语法或结构化泛化？",
+          "在更多seed和更多K值（2、8）下，循环深度与加层深度的比较是否稳健？"
+        ]
+      },
+      "evidence": [
+        {
+          "quote": "In a pre-registered text-only comparison, a 12-layer stack repeated four times exceeds a standard 48-layer Transformer by 5.4 BLiMP percentage points at matched inference compute.",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "However, multimodal training lowers BLiMP accuracy by about 3.8 points in both architectures, with no clear mitigation from recurrence.",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "A batch-matched no-image control for the looped model scores 5.71 points below its original text-only baseline. The visual prefix recovers 1.85 points on average, with a 95% confidence interval of [ − 1.67 , 5.37 ]",
+          "locator": "Section 1 Introduction (RQ3)",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "The primary difference-in-differences estimate is − 0.01 -0.01 BLiMP points, with a 95% confidence interval of [ − 1.44 , 1.41 ]",
+          "locator": "Section 5.2",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "At matched inference compute, the looped model outperforms the 48-layer standard model by 5.36 BLiMP points in text-only training and 3.67 points in multimodal training.",
+          "locator": "Section 5.1",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "The standard model applies this stack once, whereas the looped model applies it four times, sharing weights across iterations.",
+          "locator": "Section 3.1",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Each image is represented by a single 768-dimensional feature vector from a frozen DINOv2 ViT-B/14 encoder",
+          "locator": "Section 3.2",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "The looped models add the original text embeddings after every application of the shared core.",
+          "locator": "Section 3.1",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Shuffling the image features increases caption prediction loss (negative log-likelihood, NLL) by 1.45 nats per token for std_mm .",
+          "locator": "Section 5.3",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "No looped condition exceeds std_mm ’s mean VQA accuracy of 47.4%.",
+          "locator": "Section 5.3",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "The 0.95-point difference is not statistically significant with three seeds per condition (two-sided Welch’s test, p ≈ 0.12 p\\approx 0.12 ).",
+          "locator": "Section 5.1",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Multimodal training replaces half of the text-only corpus with captions and changes the source distribution of the retained text (Section 4.2 ).",
+          "locator": "Limitations",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Our comparison therefore does not separate the contribution of repeated layer applications from that of text-input injection.",
+          "locator": "Limitations",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "We hypothesize that grounding helps grammatical generalization only when the model can connect parts of an utterance to the objects and events they describe.",
+          "locator": "Section 6 Discussion",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Each main condition was trained with three random seeds. This limits our ability to detect small differences between architectures.",
+          "locator": "Limitations",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Our main experiments represent each image with a single global feature vector.",
+          "locator": "Limitations",
+          "url": "https://arxiv.org/html/2611.06206",
+          "source_type": "arxiv_full_text"
+        }
+      ],
+      "review": {
+        "review_status": "approved",
+        "reviewed_at": "2026-11-06",
+        "method": "separate AI context; exact evidence validation",
+        "model": "deepseek-flash"
+      },
+      "display": {
+        "teaser": "在100M词预算下用同一实现系统比较标准与循环Transformer，发现循环深度在等推理算力下优于加层深度，但不能缓解多模态训练带来的BLiMP下降。"
+      }
     }
   ],
   "issues": [
+    {
+      "issue_date": "2026-11-06",
+      "status": "published",
+      "paper_ids": [
+        "arxiv-2301.12597",
+        "arxiv-2611.06206"
+      ],
+      "daily_summary": {
+        "title": "多模态科研日报",
+        "trends": []
+      }
+    },
     {
       "issue_date": "2026-11-05",
       "status": "published",
