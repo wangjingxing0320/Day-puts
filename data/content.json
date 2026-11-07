@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "updated_at": "2026-11-06T00:44:57.996870+00:00",
+  "updated_at": "2026-11-07T00:38:12.138105+00:00",
   "papers": [
     {
       "paper_id": "arxiv-2611.03360",
@@ -1647,9 +1647,386 @@
       "display": {
         "teaser": "在100M词预算下用同一实现系统比较标准与循环Transformer，发现循环深度在等推理算力下优于加层深度，但不能缓解多模态训练带来的BLiMP下降。"
       }
+    },
+    {
+      "paper_id": "arxiv-2201.12086",
+      "metadata": {
+        "title_en": "BLIP: Bootstrapping Language-Image Pre-training for Unified Vision-Language Understanding and Generation",
+        "title_zh": "【经典回顾】BLIP：面向统一视觉-语言理解与生成的引导式语言-图像预训练",
+        "authors": [
+          "Junnan Li",
+          "Dongxu Li",
+          "Caiming Xiong",
+          "Steven Hoi"
+        ],
+        "first_public_date": "2022-01-28",
+        "paper_url": "https://arxiv.org/abs/2201.12086",
+        "doi": "",
+        "publication_status": "preprint"
+      },
+      "classification": {
+        "primary_module": "data",
+        "modalities": [
+          "image",
+          "text",
+          "video"
+        ],
+        "keywords": [
+          "vision-language pre-training",
+          "encoder-decoder",
+          "caption bootstrapping",
+          "CapFilt",
+          "noisy web data",
+          "image captioning",
+          "image-text retrieval",
+          "VQA"
+        ]
+      },
+      "analysis": {
+        "one_line_innovation": "提出多模态编码器-解码器混合模型（MED）与Captioning-and-Filtering（CapFilt）数据引导方法，用合成字幕加过滤来净化含噪网络图文对，从而统一支持理解与生成任务。",
+        "research_problem": "现有VLP模型要么偏重理解任务（编码器式），要么偏重生成任务（编码器-解码器式），难以兼顾；同时性能提升主要依赖扩大从网络爬取的含噪图文对规模，而噪声文本是次优监督信号。",
+        "traditional_approach": "主流方法（如CLIP、ALBEF、SimVLM）在大规模网络图文对上预训练：编码器式模型用对比损失对齐图文，编码器-解码器式模型用生成损失；数据侧仅使用简单的规则过滤去除网络文本噪声。",
+        "traditional_limitations": "编码器式模型难以直接迁移到文本生成（如图像描述），编码器-解码器模型尚未成功用于图文检索；网络alt-text常不能准确描述图像内容，构成次优的视觉-语言对齐监督信号。",
+        "method_overview": "BLIP由两部分组成：(a) MED架构，同一模型可作为单模态编码器、图像接地文本编码器或图像接地文本解码器，分别以ITC、ITM和LM三个目标联合预训练；(b) CapFilt，用同一个预训练MED分别微调出captioner与filter，captioner为网络图像生成合成字幕，filter剔除原始网络文本与合成文本中的噪声，再用引导后的数据集预训练新模型。",
+        "architecture_steps": [
+          {
+            "module": "视觉编码器",
+            "input": "输入图像",
+            "operation": "采用ViT把图像切分为patch并编码为嵌入序列，附加[CLS] token表示全局图像特征",
+            "output": "图像嵌入序列与全局图像特征"
+          },
+          {
+            "module": "单模态编码器（文本端）",
+            "input": "文本",
+            "operation": "BERT式文本编码器，句首加[CLS] token汇总句子",
+            "output": "文本表示，用于ITC对比学习"
+          },
+          {
+            "module": "图像接地文本编码器",
+            "input": "图像特征与文本",
+            "operation": "在每个transformer块的自注意力与FFN之间插入交叉注意力层，并加入[Encode] token",
+            "output": "[Encode]嵌入作为图文对的多模态表示，用于ITM二分类"
+          },
+          {
+            "module": "图像接地文本解码器",
+            "input": "图像特征与文本前缀",
+            "operation": "把双向自注意力替换为因果自注意力，用[Decode] token标记序列开始",
+            "output": "自回归生成的文本，用于LM损失"
+          },
+          {
+            "module": "CapFilt-Captioner",
+            "input": "网络图像",
+            "operation": "由预训练MED初始化的图像接地文本解码器在COCO上以LM目标微调，用nucleus采样为每张网络图像生成一条合成字幕",
+            "output": "合成字幕"
+          },
+          {
+            "module": "CapFilt-Filter",
+            "input": "网络图像、原始网络文本与合成文本",
+            "operation": "由预训练MED初始化的图像接地文本编码器在COCO上以ITC和ITM目标微调，ITM头判定为不匹配的文本视为噪声并剔除",
+            "output": "过滤后的图文对集合"
+          },
+          {
+            "module": "引导后预训练",
+            "input": "过滤后的图文对与人工标注图文对",
+            "operation": "合并为新数据集，从头预训练新的MED模型",
+            "output": "BLIP预训练模型"
+          }
+        ],
+        "technical_changes": [
+          {
+            "before": "编码器式模型（如CLIP、ALBEF）或编码器-解码器模型（如SimVLM）分别只擅长理解或生成任务",
+            "change": "提出MED：一个模型可切换为单模态编码器、图像接地文本编码器、图像接地文本解码器三种功能",
+            "rationale": "编码器式模型难以直接迁移到文本生成，编码器-解码器模型未成功用于图文检索",
+            "benefit": "同一预训练框架灵活迁移到检索、描述、VQA、NLVR2、VisDial等广泛下游任务"
+          },
+          {
+            "before": "直接在大规模含噪网络图文对上预训练",
+            "change": "提出CapFilt：captioner生成合成字幕、filter剔除原始与合成文本中的噪声，再用引导后的数据集预训练新模型",
+            "rationale": "alt-text常不能准确描述图像内容，是次优的对齐监督信号",
+            "benefit": "在14M与129M数据上均带来一致提升，且随数据规模和模型规模扩大可扩展"
+          },
+          {
+            "before": "合成字幕用beam search等确定性解码，倾向生成常见、安全的描述",
+            "change": "改用nucleus采样（p=0.9）生成更多样化的合成字幕",
+            "rationale": "更独特、更多样化的字幕包含更多新信息",
+            "benefit": "尽管噪声率更高（25%对19%），下游性能全面更优"
+          },
+          {
+            "before": "编码器与解码器的所有参数共享或完全独立",
+            "change": "文本编码器与解码器共享除自注意力层以外的全部参数",
+            "rationale": "编码与解码的差异最好由自注意力层体现，嵌入层、交叉注意力层与FFN在两任务中作用相似",
+            "benefit": "相比不共享提升性能（如COCO TR@1 78.4对78.3），同时减少参数量、提升训练效率；若共享SA层性能反而下降"
+          },
+          {
+            "before": "captioner与filter沿用预训练时的参数共享方式",
+            "change": "captioner与filter解耦，各自端到端微调",
+            "rationale": "共享参数会产生确认偏差，captioner的噪声字幕不易被filter剔除",
+            "benefit": "噪声率由8%升至25%，但下游性能提升（COCO TR@1 80.6对79.8）"
+          }
+        ],
+        "experiments": [
+          {
+            "dataset": "COCO检索（finetune，5K test）/ Flickr30K检索（zero-shot，1K test）",
+            "metric": "TR@1 / IR@1",
+            "baseline": "ALBEF（14M）",
+            "baseline_value": "COCO TR@1 77.6，IR@1 60.7；Flickr TR@1 95.9，IR@1 85.6",
+            "proposed_value": "BLIP 14M：COCO TR@1 80.6，IR@1 63.1；Flickr TR@1 96.6，IR@1 87.2",
+            "conclusion": "相同14M预训练图像下，COCO平均recall@1较ALBEF提升+2.7%"
+          },
+          {
+            "dataset": "NoCaps validation / COCO Caption Karpathy test",
+            "metric": "CIDEr / SPICE / BLEU@4",
+            "baseline": "BLIP 14M（无CapFilt时COCO CIDEr 127.8、NoCaps CIDEr 102.2）",
+            "baseline_value": "COCO CIDEr 127.8，NoCaps CIDEr 102.2",
+            "proposed_value": "BLIP CapFilt-L（129M）：COCO CIDEr 133.3，NoCaps CIDEr 109.6，SPICE 14.7",
+            "conclusion": "CapFilt与更大数据/更大backbone结合可持续提升描述性能；BLIP ViT-L在NoCaps overall CIDEr 113.2"
+          },
+          {
+            "dataset": "VQA2.0",
+            "metric": "VQA score（test-dev / test-std）",
+            "baseline": "ALBEF（14M）",
+            "baseline_value": "75.84 / 76.04",
+            "proposed_value": "BLIP 14M：77.54 / 77.62；BLIP 129M：78.24 / 78.17",
+            "conclusion": "使用14M图像即较ALBEF提升+1.64%（test），并超过使用13倍数据与更大backbone的SimVLM base"
+          },
+          {
+            "dataset": "NLVR2",
+            "metric": "dev / test-P accuracy",
+            "baseline": "ALBEF（14M，含额外预训练）",
+            "baseline_value": "82.55 / 83.14",
+            "proposed_value": "BLIP 14M：82.67 / 82.30；BLIP 129M：82.48 / 83.08",
+            "conclusion": "除ALBEF外优于现有方法；NLVR2从额外网络图像获益有限，可能源于域差异"
+          },
+          {
+            "dataset": "VisDial v1.0 validation",
+            "metric": "MRR / R@1 / R@5 / R@10 / MR",
+            "baseline": "VD-ViLBERT",
+            "baseline_value": "MRR 69.10，R@1 55.88，R@5 85.50，R@10 93.29，MR 3.25",
+            "proposed_value": "MRR 69.41，R@1 56.44，R@5 85.90，R@10 93.30，MR 3.20",
+            "conclusion": "在VisDial v1.0验证集上达到state-of-the-art"
+          },
+          {
+            "dataset": "MSRVTT text-to-video retrieval（1k test split，zero-shot）",
+            "metric": "R@1 / R@5 / R@10 / MdR",
+            "baseline": "FiT（zero-shot）",
+            "baseline_value": "R@1 18.7，R@5 39.5，R@10 51.6，MdR 10",
+            "proposed_value": "R@1 43.3，R@5 65.6，R@10 74.7，MdR 2",
+            "conclusion": "零样本迁移到视频检索大幅领先，甚至超过在目标视频数据上finetune的ClipBERT +12.4% recall@1"
+          },
+          {
+            "dataset": "MSRVTT-QA / MSVD-QA（zero-shot）",
+            "metric": "top-1 test accuracy",
+            "baseline": "VQA-T（zero-shot）",
+            "baseline_value": "2.9 / 7.5",
+            "proposed_value": "19.2 / 35.2",
+            "conclusion": "图像-语言模型对视频问答具有强泛化能力，尽管仅均匀采样帧并拼接、忽略时序信息"
+          },
+          {
+            "dataset": "消融：14M数据上CapFilt（COCO检索finetune/COCO描述）",
+            "metric": "TR@1/IR@1/CIDEr",
+            "baseline": "无captioner、无filter",
+            "baseline_value": "TR@1 78.4，IR@1 60.7，CIDEr 127.8",
+            "proposed_value": "captioner+filter（ViT-B）：TR@1 80.6，IR@1 63.1，CIDEr 129.7",
+            "conclusion": "captioner与filter效果互补；在129M数据与ViT-L backbone下可进一步扩展"
+          }
+        ],
+        "limitations": [
+          {
+            "description": "CapFilt的captioner与filter均基于COCO微调，其合成与过滤行为受该小规模人工标注数据分布约束。",
+            "basis": "Both the captioner and the filter are initialized from the same pre-trained MED model, and finetuned individually on the COCO dataset."
+          },
+          {
+            "description": "零样本视频迁移采用均匀采样帧后拼接的简单方式，完全忽略时序信息。",
+            "basis": "Note that this simple approach ignores all temporal information."
+          },
+          {
+            "description": "在NLVR2上额外网络图像收益有限，提示网络数据与下游数据存在域差异。",
+            "basis": "Interestingly, performance on NLVR 2 does not benefit much from additional web images, possibly due to the domain gap between web data and downstream data."
+          },
+          {
+            "description": "CapFilt流程需先用引导数据集预训练新模型，无法从旧模型继续训练，增加了训练成本。",
+            "basis": "Table 13 hows that continue training does not help."
+          }
+        ],
+        "ship_transfer": {
+          "relevance": "BLIP的图文对齐、检索式跨模态匹配与CapFilt式数据自净化思路可迁移到船舶领域多模态场景，如船载摄像头图像与AIS/航行日志文本、海事监控视频与文本描述的跨模态检索、基于图像的船舶行为描述生成、以及图文问答式海事决策辅助。",
+          "adaptations": [
+            "将图文对比与匹配预训练适配为船舶监控图像/视频帧与海事文本（AIS报文、航行日志、VTS记录）的对齐",
+            "把captioner与filter在船舶领域少量人工标注数据（如标注的船型、航态、会遇局面描述）上微调，用于净化网络或自动采集的海事文本",
+            "NLVR2式的双图交叉注意力结构可改造为双摄像头/多视角船舶场景推理",
+            "视频零样本迁移的均匀采样方案可加装时序建模（如TimeSformer类）以适配船舶航迹时序"
+          ],
+          "research_hypotheses": [
+            "【推测】用CapFilt净化自动采集的AIS文本与监控图像对，可提升船舶图像-文本检索与船型识别辅助任务的性能",
+            "【推测】领域内微调的captioner生成的多样化合成描述（如会遇态势描述）能增强模型对罕见海事场景的泛化",
+            "【推测】多视角交叉注意力结构可支持双摄像头下的船舶目标一致性判断与态势推理",
+            "【推测】图像-语言预训练模型零样本迁移到船舶监控视频检索，可能优于直接在少量船舶视频上微调的小模型"
+          ]
+        },
+        "open_questions": [
+          "多轮数据集引导能否持续带来收益，以及何时饱和",
+          "每张图像生成多条合成字幕对预训练语料规模与质量的影响",
+          "多个不同captioner与filter集成的效果",
+          "如何把CapFilt思想与显式时序建模结合，用于视频-语言预训练"
+        ]
+      },
+      "evidence": [
+        {
+          "quote": "we propose BLIP, a new VLP framework which transfers flexibly to both vision-language understanding and generation tasks.",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "most existing pre-trained models only excel in either understanding-based tasks or generation-based tasks.",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "performance improvement has been largely achieved by scaling up the dataset with noisy image-text pairs collected from the web, which is a suboptimal source of supervision.",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "a captioner generates synthetic captions and a filter removes the noisy ones.",
+          "locator": "Abstract",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "encoder-based models are less straightforward to directly transfer to text generation tasks",
+          "locator": "1 Introduction",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "whereas encoder-decoder models have not been successfully adopted for image-text retrieval tasks.",
+          "locator": "1 Introduction",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Multimodal mixture of Encoder-Decoder (MED): a new model architecture for effective multi-task pre-training and flexible transfer learning.",
+          "locator": "1 Introduction",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Captioning and Filtering (CapFilt): a new dataset boostrapping method for learning from noisy image-text pairs.",
+          "locator": "1 Introduction",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "We employ a visual transformer",
+          "locator": "3.1 Model Architecture",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "which injects visual information by inserting one additional cross-attention (CA) layer between the self-attention (SA) layer and the feed forward network (FFN) for each transformer block of the text encoder.",
+          "locator": "3.1 Model Architecture",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "which replaces the bi-directional self-attention layers in the image-grounded text encoder with causal self-attention layers.",
+          "locator": "3.1 Model Architecture",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "It aims to align the feature space of the visual transformer and the text transformer by encouraging positive image-text pairs to have similar representations in contrast to the negative pairs.",
+          "locator": "3.2 Pre-training Objectives",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "the text encoder and text decoder share all parameters except for the SA layers.",
+          "locator": "3.2 Pre-training Objectives",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "The filter removes noisy texts in both the original web texts",
+          "locator": "3.3 CapFilt",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "we combine the filtered image-text pairs with the human-annotated pairs to form a new dataset, which we use to pre-train a new model.",
+          "locator": "3.3 CapFilt",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Nucleus sampling leads to evidently better performance, despite being more noisy as suggested by a higher noise ratio from the filter.",
+          "locator": "4.3 Diversity is Key for Synthetic Captions",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Due to parameter sharing, noisy captions produced by the captioner are less likely to be filtered out by the filter, as indicated by the lower noise ratio (8% compared to 25%).",
+          "locator": "4.4 Parameter Sharing and Decoupling",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Using 14M images, BLIP outperforms ALBEF by +1.64% on the test set.",
+          "locator": "5.3 Visual Question Answering (VQA)",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Note that this simple approach ignores all temporal information.",
+          "locator": "5.6 Zero-shot Transfer to Video-Language Tasks",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Interestingly, performance on NLVR 2 does not benefit much from additional web images, possibly due to the domain gap between web data and downstream data.",
+          "locator": "5.4 Natural Language Visual Reasoning (NLVR 2 )",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "Table 13 hows that continue training does not help.",
+          "locator": "6 Additional Ablation Study",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        },
+        {
+          "quote": "we perform zero-shot transfer to text-to-video retrieval and video question answering",
+          "locator": "5.6 Zero-shot Transfer to Video-Language Tasks",
+          "url": "https://arxiv.org/html/2201.12086",
+          "source_type": "arxiv_full_text"
+        }
+      ],
+      "review": {
+        "review_status": "approved",
+        "reviewed_at": "2026-11-07",
+        "method": "separate AI context; exact evidence validation",
+        "model": "deepseek-flash"
+      },
+      "display": {
+        "teaser": "【经典回顾 · BLIP】提出多模态编码器-解码器混合模型（MED）与Captioning-and-Filtering（CapFilt）数据引导方法，用合成字幕加过滤来净化含噪网络图文对，从而统一支持理解与生成任务。"
+      }
     }
   ],
   "issues": [
+    {
+      "issue_date": "2026-11-07",
+      "status": "published",
+      "paper_ids": [
+        "arxiv-2201.12086"
+      ],
+      "daily_summary": {
+        "title": "多模态科研日报",
+        "trends": []
+      }
+    },
     {
       "issue_date": "2026-11-06",
       "status": "published",
